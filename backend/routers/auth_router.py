@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import create_access_token, get_current_user, hash_password, verify_password
 from database import get_db
-from models import ChipsLedger, User
+from models import ChipsLedger, InviteCode, User
 from schemas import Token, UserLogin, UserRegister, UserResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -24,8 +24,28 @@ def _make_initials(display_name: Optional[str], username: str) -> str:
     return source[:2].upper()
 
 
+async def _validate_invite(code: str, db: AsyncSession) -> InviteCode:
+    """Fetch and validate an invite code. Raises 400 on any failure."""
+    result = await db.execute(select(InviteCode).where(InviteCode.code == code))
+    invite = result.scalar_one_or_none()
+
+    if not invite or not invite.is_active:
+        raise HTTPException(status_code=400, detail="Codice invito non valido o scaduto")
+
+    if invite.use_count >= invite.max_uses:
+        raise HTTPException(status_code=400, detail="Codice invito non valido o scaduto")
+
+    if invite.expires_at is not None and invite.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Codice invito non valido o scaduto")
+
+    return invite
+
+
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
+    # Validate invite code first (fast-fail before touching user data)
+    invite = await _validate_invite(payload.invite_code, db)
+
     existing_email = await db.execute(select(User).where(User.email == payload.email))
     if existing_email.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email già registrata")
@@ -44,7 +64,7 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
         chips_balance=5000,
     )
     db.add(user)
-    await db.flush()
+    await db.flush()  # get user.id before ledger insert
 
     ledger = ChipsLedger(
         id=uuid.uuid4(),
@@ -55,6 +75,14 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
         description="Bonus benvenuto al Ridotto",
     )
     db.add(ledger)
+
+    # Consume the invite code
+    invite.use_count += 1
+    invite.used_by = user.id
+    invite.used_at = datetime.now(timezone.utc)
+    if invite.use_count >= invite.max_uses:
+        invite.is_active = False
+
     await db.commit()
     await db.refresh(user)
 

@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from routers.admin_router import router as admin_router
 from routers.auth_router import router as auth_router
 from routers.users_router import router as users_router
 
@@ -21,6 +22,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(admin_router)
 
 
 @app.get("/")
