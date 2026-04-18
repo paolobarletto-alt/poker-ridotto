@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<title>Ridotto · Poker Club</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #050505;
+    font-family: 'Inter', sans-serif; color: #F5F1E8;
+    overflow: hidden;
+  }
+  body { display: flex; align-items: center; justify-content: center; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.2); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(212,175,55,0.4); }
+  button { font-family: inherit; }
+  input[type="range"] { height: 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="components/shell.jsx"></script>
+<script type="text/babel" src="components/lobby.jsx"></script>
+<script type="text/babel" src="components/table.jsx"></script>
+<script type="text/babel" src="components/profile.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "cardBack": "ridotto"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [route, setRoute] = React.useState('lobby');
+  const [cardBack, setCardBack] = React.useState(TWEAK_DEFAULTS.cardBack);
+  const [tweaksOpen, setTweaksOpen] = React.useState(false);
+
+  const user = { name: USER.name, initials: USER.initials, balance: USER.balance };
+
+  // Tweaks wiring
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (!e.data || typeof e.data !== 'object') return;
+      if (e.data.type === '__activate_edit_mode') setTweaksOpen(true);
+      if (e.data.type === '__deactivate_edit_mode') setTweaksOpen(false);
+    };
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  const setCard = (v) => {
+    setCardBack(v);
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { cardBack: v } }, '*');
+  };
+
+  const handleJoin = () => setRoute('table');
+
+  let content;
+  if (route === 'profile') content = <Profile />;
+  else if (route === 'storico') content = <Profile />;
+  else if (route === 'table') content = <PokerTable cardBack={cardBack} onLeave={() => setRoute('lobby')} />;
+  else if (route === 'cassa') content = <CassaScreen />;
+  else content = <Lobby route={route} onJoinTable={handleJoin} />;
+
+  return (
+    <div style={{
+      width: '100vw', height: '100vh',
+      background: 'radial-gradient(ellipse at 30% 20%, #1a1008 0%, #050505 60%)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 18,
+    }}>
+      <div style={{
+        width: '100%', maxWidth: 1440, height: '100%', maxHeight: 900,
+        display: 'flex',
+        background: '#0a0a0a',
+        border: '1px solid rgba(212,175,55,0.1)',
+        borderRadius: 6, overflow: 'hidden',
+        boxShadow: '0 30px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(0,0,0,0.8)',
+        position: 'relative',
+      }}>
+        <Sidebar route={route} setRoute={setRoute} user={user} />
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', background: '#0a0a0a' }}
+             data-screen-label={route}>
+          {content}
+        </div>
+
+        {tweaksOpen && (
+          <div style={{
+            position: 'absolute', bottom: 18, right: 18, width: 280,
+            background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(212,175,55,0.3)', padding: 18,
+            zIndex: 50,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ fontSize: 10, letterSpacing: '0.22em', color: '#D4AF37', fontWeight: 600 }}>
+                TWEAKS
+              </div>
+              <div style={{ fontSize: 10, color: 'rgba(245,241,232,0.4)' }}>Dorso carte</div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {Object.keys(CARD_BACKS).map(k => (
+                <div key={k} onClick={() => setCard(k)} style={{
+                  cursor: 'pointer', textAlign: 'center',
+                  border: cardBack === k ? '1.5px solid #D4AF37' : '1px solid rgba(212,175,55,0.15)',
+                  padding: 6,
+                }}>
+                  <div style={{ width: '100%', height: 64, marginBottom: 6 }}>
+                    {CARD_BACKS[k].render()}
+                  </div>
+                  <div style={{ fontSize: 9.5, color: cardBack === k ? '#D4AF37' : 'rgba(245,241,232,0.65)', letterSpacing: '0.08em' }}>
+                    {CARD_BACKS[k].name}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CassaScreen() {
+  return (
+    <div style={{ padding: 40 }}>
+      <TopBar subtitle="PORTAFOGLIO" title="Cassa" actions={null} />
+      <div style={{ marginTop: 30, padding: 40, border: '1px solid rgba(212,175,55,0.15)',
+        textAlign: 'center', color: 'rgba(245,241,232,0.55)' }}>
+        <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: '#F5F1E8', marginBottom: 8 }}>
+          Prossimamente
+        </div>
+        <div style={{ fontSize: 13 }}>Depositi, prelievi e storico transazioni.</div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
