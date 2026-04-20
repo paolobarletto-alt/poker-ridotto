@@ -558,6 +558,25 @@ async def websocket_table(
         big_blind=db_table.big_blind,
         speed=db_table.speed,
     )
+
+    # Se il game in memoria è vuoto ma nel DB ci sono giocatori seduti,
+    # ricostruisce lo stato (es. dopo riavvio del server)
+    if len(game.ordine) == 0:
+        async with AsyncSessionLocal() as db:
+            seats_result = await db.execute(
+                select(TableSeat, User)
+                .join(User, TableSeat.user_id == User.id)
+                .where(TableSeat.table_id == uuid.UUID(table_id))
+            )
+            db_seats = seats_result.all()
+        for db_seat, seat_user in db_seats:
+            uid = str(seat_user.id)
+            display = seat_user.display_name or seat_user.username
+            game.aggiungi_giocatore(uid, display, db_seat.stack)
+            game_manager.register_seat(table_id, uid, db_seat.seat_number)
+        if db_seats:
+            logger.info("Stato tavolo %s ricostruito dal DB (%d giocatori)", table_id, len(db_seats))
+
     game_manager.add_connection(table_id, user_id, websocket)
 
     # ── 4. Messaggio di benvenuto ──────────────────────────────────────────
