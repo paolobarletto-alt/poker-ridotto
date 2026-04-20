@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { tablesApi } from '../api/tables';
 
 // ————— Traffic lights —————
 export function TrafficLights() {
@@ -14,37 +16,55 @@ export function TrafficLights() {
 // ————— Sidebar —————
 const ROUTE_MAP = {
   lobby:   '/lobby',
-  tornei:  '/lobby/tornei',
   cash:    '/lobby/cash',
   sitgo:   '/lobby/sitgo',
-  fast:    '/lobby/fast',
   table:   '/table/active',
   profile: '/profile',
   storico: '/profile',
   cassa:   '/lobby',
+  admin:   '/admin',
 };
 
 export function Sidebar({ user }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [activeSeat, setActiveSeat] = useState(null);
+
+  useEffect(() => {
+    tablesApi.getCurrentSeat()
+      .then(res => setActiveSeat(res.data))
+      .catch(() => setActiveSeat(null));
+  }, []);
+
+  const tableRoute = activeSeat ? `/table/${activeSeat.table_id}` : null;
 
   const items = [
     { id: 'lobby',   label: 'Lobby',        section: 'gioca' },
-    { id: 'tornei',  label: 'Tornei',        section: 'gioca' },
     { id: 'cash',    label: 'Cash Game',     section: 'gioca' },
     { id: 'sitgo',   label: 'Sit & Go',      section: 'gioca' },
-    { id: 'fast',    label: 'Fast',          section: 'gioca' },
-    { id: 'table',   label: 'Tavolo attivo', section: 'sessione', badge: 'LIVE' },
+    { id: 'table',   label: activeSeat ? 'Tavolo attivo' : 'Nessun tavolo', section: 'sessione', badge: activeSeat ? 'LIVE' : null, disabled: !activeSeat },
     { id: 'profile', label: 'Profilo',       section: 'account' },
     { id: 'storico', label: 'Storico mani',  section: 'account' },
     { id: 'cassa',   label: 'Cassa',         section: 'account' },
+    ...(user?.is_admin ? [{ id: 'admin', label: 'Admin', section: 'account', badge: 'ADM' }] : []),
   ];
+
+  const ROUTE_MAP_LOCAL = {
+    lobby:   '/lobby',
+    cash:    '/lobby/cash',
+    sitgo:   '/lobby/sitgo',
+    table:   tableRoute || '/lobby',
+    profile: '/profile',
+    storico: '/profile',
+    cassa:   '/lobby',
+    admin:   '/admin',
+  };
 
   const sections = ['gioca', 'sessione', 'account'];
   const sectionLabels = { gioca: 'GIOCA', sessione: 'IN CORSO', account: 'ACCOUNT' };
 
   const isActive = (id) => {
-    const target = ROUTE_MAP[id];
+    const target = ROUTE_MAP_LOCAL[id];
     if (id === 'lobby') return pathname === '/lobby';
     return pathname.startsWith(target);
   };
@@ -67,13 +87,13 @@ export function Sidebar({ user }) {
           fontFamily: 'Playfair Display, serif', fontSize: 26, fontWeight: 700,
           color: '#D4AF37', letterSpacing: '-0.02em', lineHeight: 1,
         }}>
-          Ridotto<span style={{ color: '#F5F1E8', fontStyle: 'italic', fontWeight: 400 }}>.</span>
+          Micetti<span style={{ color: '#F5F1E8', fontStyle: 'italic', fontWeight: 400 }}>.</span>
         </div>
         <div style={{
           fontFamily: 'Inter, sans-serif', fontSize: 9, fontWeight: 600,
           color: 'rgba(245,241,232,0.4)', letterSpacing: '0.2em', marginTop: 4,
         }}>
-          POKER CLUB · DAL 2019
+          POKER CLUB DI SCARSI
         </div>
       </div>
 
@@ -90,18 +110,18 @@ export function Sidebar({ user }) {
               return (
                 <div
                   key={item.id}
-                  onClick={() => navigate(ROUTE_MAP[item.id])}
+                  onClick={() => !item.disabled && navigate(ROUTE_MAP_LOCAL[item.id])}
                   style={{
-                    padding: '9px 20px', cursor: 'pointer', position: 'relative',
+                    padding: '9px 20px', cursor: item.disabled ? 'default' : 'pointer', position: 'relative',
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     fontFamily: 'Inter, sans-serif', fontSize: 13.5,
-                    color: active ? '#F5F1E8' : 'rgba(245,241,232,0.62)',
+                    color: item.disabled ? 'rgba(245,241,232,0.28)' : (active ? '#F5F1E8' : 'rgba(245,241,232,0.62)'),
                     fontWeight: active ? 500 : 400,
                     background: active ? 'linear-gradient(90deg, rgba(212,175,55,0.08), transparent)' : 'transparent',
                     transition: 'all 0.15s',
                   }}
-                  onMouseEnter={e => !active && (e.currentTarget.style.color = '#F5F1E8')}
-                  onMouseLeave={e => !active && (e.currentTarget.style.color = 'rgba(245,241,232,0.62)')}
+                  onMouseEnter={e => !item.disabled && !active && (e.currentTarget.style.color = '#F5F1E8')}
+                  onMouseLeave={e => !item.disabled && !active && (e.currentTarget.style.color = 'rgba(245,241,232,0.62)')}
                 >
                   {active && <div style={{
                     position: 'absolute', left: 0, top: 6, bottom: 6, width: 2,
@@ -136,11 +156,13 @@ export function Sidebar({ user }) {
             color: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 700,
             flexShrink: 0,
-          }}>{user.initials}</div>
+          }}>{user.avatar_initials ?? (user.username ?? '?').slice(0, 2).toUpperCase()}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, color: '#F5F1E8', fontWeight: 500, fontFamily: 'Inter, sans-serif' }}>{user.name}</div>
+            <div style={{ fontSize: 12.5, color: '#F5F1E8', fontWeight: 500, fontFamily: 'Inter, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user.display_name || user.username}
+            </div>
             <div style={{ fontSize: 10.5, color: '#D4AF37', fontFamily: 'JetBrains Mono, monospace', marginTop: 1 }}>
-              € {(user.balance ?? 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+              {(user.chips_balance ?? 0).toLocaleString('it-IT')} chips
             </div>
           </div>
         </div>

@@ -215,14 +215,14 @@ export default function LoginPage() {
               fontFamily: 'Playfair Display, serif', fontSize: 46, fontWeight: 700,
               color: '#D4AF37', letterSpacing: '-0.025em', lineHeight: 1,
             }}>
-              Ridotto<span style={{ color: '#F5F1E8', fontStyle: 'italic', fontWeight: 400 }}>.</span>
+              Micetti<span style={{ color: '#F5F1E8', fontStyle: 'italic', fontWeight: 400 }}>.</span>
             </div>
             <div style={{
               marginTop: 10, fontSize: 9.5, fontWeight: 700,
               color: 'rgba(245,241,232,0.35)', letterSpacing: '0.3em',
               fontFamily: 'Inter, sans-serif',
             }}>
-              POKER CLUB PRIVATO
+              POKER CLUB DI SCARSI
             </div>
             {/* decorative rule */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18 }}>

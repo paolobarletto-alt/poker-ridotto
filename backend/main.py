@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,11 +7,26 @@ from fastapi.responses import JSONResponse
 
 from routers.admin_router import router as admin_router
 from routers.auth_router import router as auth_router
+from routers.sitgo_router import router as sitgo_router
 from routers.users_router import router as users_router
+from routers.ws_router import router as ws_router
+from scheduler import start_scheduler
 
 logger = logging.getLogger("ridotto")
 
-app = FastAPI(title="Ridotto Poker API", version="1.0.0")
+_scheduler = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _scheduler
+    _scheduler = start_scheduler()
+    yield
+    if _scheduler:
+        _scheduler.shutdown(wait=False)
+
+
+app = FastAPI(title="Ridotto Poker API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,6 +39,8 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(admin_router)
+app.include_router(sitgo_router)
+app.include_router(ws_router)
 
 
 @app.get("/")

@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     FRONTEND_URL: str = "http://localhost:5173"
+    DAILY_REFILL_THRESHOLD: int = 1000
+    DAILY_REFILL_AMOUNT: int = 10000
 
 
 settings = Settings()

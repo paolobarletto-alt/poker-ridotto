@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import LobbyPage from './pages/LobbyPage';
 import TablePage from './pages/TablePage';
 import ProfilePage from './pages/ProfilePage';
+import AdminPage from './pages/AdminPage';
 
 function ProtectedRoute({ children }) {
   const { user, isLoading } = useAuth();
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route path="/lobby/:view" element={<ProtectedRoute><LobbyPage /></ProtectedRoute>} />
         <Route path="/table/:id" element={<ProtectedRoute><TablePage /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/lobby" replace />} />
       </Routes>
     );

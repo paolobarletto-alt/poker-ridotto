@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
@@ -171,3 +171,42 @@ async def add_chips(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+# ————— Chips management —————
+
+@router.post("/chips/refill-all")
+async def refill_all_chips(
+    admin: User = Depends(require_admin),
+):
+    from scheduler import daily_chips_refill
+    count = await daily_chips_refill()
+    return {"message": "Ricarica completata", "users_refilled": count}
+
+
+@router.get("/chips/stats")
+async def chips_stats(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    total_chips = await db.scalar(select(func.sum(User.chips_balance)).where(User.is_active == True)) or 0
+    users_below = await db.scalar(
+        select(func.count()).where(
+            User.is_active == True,
+            User.chips_balance < settings.DAILY_REFILL_THRESHOLD,
+        )
+    ) or 0
+    user_count = await db.scalar(select(func.count()).where(User.is_active == True)) or 1
+    avg_balance = round(total_chips / user_count, 1)
+
+    richest_result = await db.execute(
+        select(User).where(User.is_active == True).order_by(User.chips_balance.desc()).limit(1)
+    )
+    richest = richest_result.scalar_one_or_none()
+
+    return {
+        "total_chips": total_chips,
+        "users_below_threshold": users_below,
+        "avg_balance": avg_balance,
+        "richest": {"username": richest.username, "balance": richest.chips_balance} if richest else None,
+    }

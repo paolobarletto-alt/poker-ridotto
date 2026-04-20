@@ -1,48 +1,45 @@
+import { useEffect, useState } from 'react';
+import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { GoldButton } from './Shell';
 
-const USER = {
-  name: 'Lorenzo Bianchi',
-  username: 'lorenzo_b',
-  initials: 'LB',
-  member: 'Marzo 2022',
-  vipLevel: 'Oro',
-  balance: 3842.50,
-  stats: {
-    gamesPlayed: 2847,
-    hoursPlayed: 612,
-    totalWinnings: 18420,
-    totalLosses: 14180,
-    netResult: 4240,
-    biggestPot: 1280,
-    roi: 14.7,
-    vpip: 22.4,
-    pfr: 18.1,
-    af: 2.4,
-    winRate: 53.2,
-  },
-};
+// ————— Skeleton —————
+const shimmerStyle = (() => {
+  if (typeof document !== 'undefined' && !document.getElementById('profile-shimmer')) {
+    const s = document.createElement('style');
+    s.id = 'profile-shimmer';
+    s.textContent = `
+      @keyframes profileShimmer {
+        0%   { background-position: -400px 0; }
+        100% { background-position: 400px 0; }
+      }
+      .p-skel {
+        background: linear-gradient(90deg,
+          rgba(212,175,55,0.06) 25%, rgba(212,175,55,0.14) 50%, rgba(212,175,55,0.06) 75%);
+        background-size: 800px 100%;
+        animation: profileShimmer 1.6s infinite linear;
+        border-radius: 3px;
+      }
+    `;
+    document.head.appendChild(s);
+  }
+  return null;
+})();
 
-const PL_DATA = [
-  0, 45, 120, 80, 210, 180, 340, 280, 420, 380,
-  510, 480, 420, 580, 640, 720, 680, 580, 740, 820,
-  890, 960, 1020, 980, 1180, 1240, 1320, 1400, 1360, 1480,
-  1540, 1680, 1820, 2100, 2240, 2380, 2460, 2580, 2720, 2880,
-  3020, 3180, 3320, 3480, 3620, 3780, 3960, 4100, 4180, 4240,
-];
-
-const RECENT_GAMES = [
-  { id: 1, date: '17 APR', time: '22:14', type: 'Cash €0.50/€1', duration: '2h 14m', hands: 287, result: +185.40, status: 'win' },
-  { id: 2, date: '17 APR', time: '19:30', type: 'Sit & Go €25', duration: '48m', hands: 62, result: -25, status: 'loss' },
-  { id: 3, date: '16 APR', time: '21:00', type: 'Tornei · Il Notturno', duration: '3h 42m', hands: 412, result: +420, status: 'win' },
-  { id: 4, date: '16 APR', time: '18:45', type: 'Fast €10', duration: '32m', hands: 58, result: +34.20, status: 'win' },
-  { id: 5, date: '15 APR', time: '23:10', type: 'Cash €1/€2', duration: '1h 48m', hands: 194, result: -128, status: 'loss' },
-  { id: 6, date: '15 APR', time: '20:22', type: 'Sit & Go €50', duration: '1h 12m', hands: 98, result: +150, status: 'win' },
-  { id: 7, date: '14 APR', time: '22:00', type: 'Tornei · Turbo Serale', duration: '1h 56m', hands: 284, result: -30, status: 'loss' },
-  { id: 8, date: '13 APR', time: '21:32', type: 'Cash €0.25/€0.50', duration: '3h 12m', hands: 389, result: +88.60, status: 'win' },
-];
+function Skel({ w = 80, h = 18, style = {} }) {
+  return <div className="p-skel" style={{ width: w, height: h, display: 'inline-block', ...style }} />;
+}
 
 // ————— P/L chart —————
 function PLChart({ data }) {
+  if (!data || data.length < 2) {
+    return (
+      <div style={{ height: 170, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'rgba(245,241,232,0.4)', fontSize: 13, fontFamily: 'Inter, sans-serif', fontStyle: 'italic' }}>
+        Gioca le tue prime partite per vedere il grafico
+      </div>
+    );
+  }
   const w = 560, h = 170, pad = 4;
   const max = Math.max(...data);
   const min = Math.min(0, ...data);
@@ -55,7 +52,6 @@ function PLChart({ data }) {
   const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ');
   const areaPath = `${path} L${points[points.length - 1][0]},${h - pad} L${points[0][0]},${h - pad} Z`;
   const zeroY = h - pad - ((0 - min) / range) * (h - pad * 2);
-
   return (
     <svg width={w} height={h} style={{ display: 'block' }}>
       <defs>
@@ -77,33 +73,137 @@ function PLChart({ data }) {
 }
 
 // ————— Stat tile —————
-function StatTile({ label, value, sub, accent, wide }) {
+function StatTile({ label, value, sub, accent, wide, loading, tooltip }) {
+  const [showTip, setShowTip] = useState(false);
   return (
-    <div style={{
-      gridColumn: wide ? 'span 2' : undefined,
-      padding: '18px 20px',
-      border: '1px solid rgba(212,175,55,0.12)',
-      background: accent ? 'linear-gradient(180deg, rgba(212,175,55,0.08), transparent)' : 'transparent',
-    }}>
+    <div
+      title={tooltip || undefined}
+      style={{
+        gridColumn: wide ? 'span 2' : undefined,
+        padding: '18px 20px',
+        border: '1px solid rgba(212,175,55,0.12)',
+        background: accent ? 'linear-gradient(180deg, rgba(212,175,55,0.08), transparent)' : 'transparent',
+        position: 'relative', cursor: tooltip ? 'help' : 'default',
+      }}
+      onMouseEnter={() => tooltip && setShowTip(true)}
+      onMouseLeave={() => setShowTip(false)}
+    >
       <div style={{ fontSize: 9.5, letterSpacing: '0.22em', color: 'rgba(245,241,232,0.5)', fontWeight: 600, marginBottom: 8, fontFamily: 'Inter, sans-serif' }}>
         {label}
       </div>
-      <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 26, fontWeight: 500, color: accent ? '#D4AF37' : '#F5F1E8', letterSpacing: '-0.01em', lineHeight: 1 }}>
-        {value}
-      </div>
-      {sub && (
+      {loading
+        ? <Skel w={60} h={26} />
+        : <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 26, fontWeight: 500, color: accent ? '#D4AF37' : '#F5F1E8', letterSpacing: '-0.01em', lineHeight: 1 }}>
+            {value}
+          </div>
+      }
+      {sub && !loading && (
         <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(245,241,232,0.55)', fontFamily: 'Inter, sans-serif' }}>{sub}</div>
       )}
+      {showTip && tooltip && (
+        <div style={{
+          position: 'absolute', bottom: '105%', left: '50%', transform: 'translateX(-50%)',
+          background: '#1a1a1a', border: '1px solid rgba(212,175,55,0.3)',
+          color: 'rgba(245,241,232,0.8)', fontSize: 11, padding: '6px 10px',
+          whiteSpace: 'nowrap', zIndex: 50, fontFamily: 'Inter, sans-serif',
+          pointerEvents: 'none',
+        }}>
+          {tooltip}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ————— Refill info modal —————
+function RefillModal({ onClose }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 200,
+    }} onClick={onClose}>
+      <div style={{
+        background: '#0e0e0e', border: '1px solid rgba(212,175,55,0.25)',
+        borderRadius: 2, padding: '32px 36px', maxWidth: 400, width: '90%',
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#F5F1E8', marginBottom: 14 }}>
+          Ricarica chips
+        </div>
+        <p style={{ fontSize: 14, color: 'rgba(245,241,232,0.75)', fontFamily: 'Inter, sans-serif', lineHeight: 1.6, marginBottom: 8 }}>
+          Le chips vengono ricaricate automaticamente ogni giorno.
+        </p>
+        <p style={{ fontSize: 14, color: 'rgba(245,241,232,0.75)', fontFamily: 'Inter, sans-serif', lineHeight: 1.6, marginBottom: 24 }}>
+          Se sei sotto <span style={{ color: '#D4AF37' }}>1.000 chips</span>, domani mattina tornerai a <span style={{ color: '#D4AF37' }}>10.000 chips</span>.
+        </p>
+        <GoldButton onClick={onClose} size="sm">Ho capito</GoldButton>
+      </div>
     </div>
   );
 }
 
 // ————— Profile —————
 export default function Profile() {
-  const winRate = Math.round((RECENT_GAMES.filter(g => g.status === 'win').length / RECENT_GAMES.length) * 100);
+  const { user } = useAuth();
+
+  const [statsData, setStatsData] = useState(null);
+  const [gameHistory, setGameHistory] = useState(null);
+  const [chipsHistory, setChipsHistory] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showRefill, setShowRefill] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/users/me/stats'),
+      api.get('/users/me/game-history'),
+      api.get('/users/me/chips-history'),
+    ])
+      .then(([stats, history, chips]) => {
+        setStatsData(stats.data);
+        setGameHistory(history.data);
+        setChipsHistory(chips.data);
+      })
+      .catch(() => {
+        setStatsData({});
+        setGameHistory([]);
+        setChipsHistory([]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Build cumulative P/L series from chips history
+  const plData = (() => {
+    if (!chipsHistory) return null;
+    const relevant = [...chipsHistory]
+      .filter(e => ['hand_win', 'hand_loss', 'sitgo_win', 'sitgo_loss'].includes(e.reason))
+      .reverse(); // oldest first
+    if (!relevant.length) return null;
+    const cumulative = [];
+    let sum = 0;
+    for (const e of relevant) {
+      sum += e.amount;
+      cumulative.push(sum);
+    }
+    return cumulative;
+  })();
+
+  const fmt = (n) => typeof n === 'number' ? n.toLocaleString('it-IT') : '—';
+  const fmtStat = (v, decimals = 1) => v == null ? null : typeof v === 'number' ? v.toFixed(decimals) : v;
+  const memberSince = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
+    : '';
+
+  const initials = user?.avatar_initials || (user?.username || '?').slice(0, 2).toUpperCase();
+  const displayName = user?.display_name || user?.username || '';
+  const balance = user?.chips_balance ?? 0;
+  const netResult = statsData?.net_result ?? null;
+
+  const TOOLTIP_LOW = 'Servono almeno 20 mani';
 
   return (
     <div style={{ paddingBottom: 40 }}>
+      {showRefill && <RefillModal onClose={() => setShowRefill(false)} />}
+
       {/* Header */}
       <div style={{
         padding: '32px 32px 28px',
@@ -117,22 +217,22 @@ export default function Profile() {
             color: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontFamily: 'Playfair Display, serif', fontSize: 34, fontWeight: 700,
             boxShadow: '0 6px 20px rgba(212,175,55,0.3)',
-          }}>{USER.initials}</div>
+          }}>{initials}</div>
           <div>
             <div style={{ fontSize: 10, letterSpacing: '0.22em', color: 'rgba(245,241,232,0.5)', marginBottom: 5 }}>
-              MEMBRO DAL {USER.member.toUpperCase()} · LIVELLO <span style={{ color: '#D4AF37' }}>{USER.vipLevel.toUpperCase()}</span>
+              MEMBRO DAL {memberSince.toUpperCase()}
             </div>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, color: '#F5F1E8', fontWeight: 500, letterSpacing: '-0.015em', lineHeight: 1 }}>
-              {USER.name}
+              {displayName}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(245,241,232,0.6)', marginTop: 6, fontFamily: 'JetBrains Mono, monospace' }}>
-              @{USER.username}
+              @{user?.username}
             </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <GoldButton variant="ghost" size="sm">Impostazioni</GoldButton>
-          <GoldButton size="sm">Deposita</GoldButton>
+          <GoldButton size="sm" onClick={() => setShowRefill(true)}>Deposita</GoldButton>
         </div>
       </div>
 
@@ -141,36 +241,26 @@ export default function Profile() {
         <div style={{ padding: '26px 32px', borderRight: '1px solid rgba(212,175,55,0.08)' }}>
           <div style={{ fontSize: 10, letterSpacing: '0.22em', color: 'rgba(245,241,232,0.5)', marginBottom: 8 }}>SALDO</div>
           <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 38, color: '#F5F1E8', fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1, marginBottom: 4 }}>
-            €{USER.balance.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+            {fmt(balance)} <span style={{ fontSize: 18, color: 'rgba(245,241,232,0.5)' }}>chips</span>
           </div>
           <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.55)' }}>Disponibile per il gioco</div>
           <div style={{ marginTop: 22, fontSize: 10, letterSpacing: '0.22em', color: 'rgba(245,241,232,0.5)', marginBottom: 8 }}>RISULTATO NETTO</div>
-          <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: '#D4AF37', fontWeight: 500, lineHeight: 1 }}>
-            +€{USER.stats.netResult.toLocaleString('it-IT')}
-          </div>
-          <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.55)', marginTop: 4 }}>
-            ROI {USER.stats.roi}% · tutto il tempo
-          </div>
+          {loading
+            ? <Skel w={120} h={28} />
+            : <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: netResult != null && netResult >= 0 ? '#D4AF37' : '#c77', fontWeight: 500, lineHeight: 1 }}>
+                {netResult != null ? `${netResult >= 0 ? '+' : ''}${fmt(netResult)}` : '—'}
+              </div>
+          }
+          <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.55)', marginTop: 4 }}>tutto il tempo</div>
         </div>
         <div style={{ padding: '26px 32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
             <div>
-              <div style={{ fontSize: 10, letterSpacing: '0.22em', color: '#D4AF37', marginBottom: 4 }}>ANDAMENTO</div>
-              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#F5F1E8' }}>Ultimi 50 giorni</div>
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {['7g', '30g', '50g', 'Tutto'].map((p, i) => (
-                <button key={p} style={{
-                  background: i === 2 ? 'rgba(212,175,55,0.15)' : 'transparent',
-                  border: '1px solid rgba(212,175,55,0.25)',
-                  color: i === 2 ? '#D4AF37' : 'rgba(245,241,232,0.65)',
-                  padding: '4px 10px', fontSize: 10, fontFamily: 'Inter, sans-serif',
-                  letterSpacing: '0.1em', cursor: 'pointer',
-                }}>{p}</button>
-              ))}
+              <div style={{ fontSize: 10, letterSpacing: '0.22em', color: '#D4AF37', marginBottom: 4 }}>ANDAMENTO P/L</div>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#F5F1E8' }}>Storico chips</div>
             </div>
           </div>
-          <PLChart data={PL_DATA} />
+          {loading ? <Skel w="100%" h={170} /> : <PLChart data={plData} />}
         </div>
       </div>
 
@@ -178,14 +268,38 @@ export default function Profile() {
       <div style={{ padding: '26px 32px', borderBottom: '1px solid rgba(212,175,55,0.08)' }}>
         <div style={{ fontSize: 10, letterSpacing: '0.22em', color: '#D4AF37', marginBottom: 14 }}>STATISTICHE LIFETIME</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0, border: '1px solid rgba(212,175,55,0.08)' }}>
-          <StatTile label="PARTITE GIOCATE" value={USER.stats.gamesPlayed.toLocaleString('it-IT')} sub="su tutte le modalità" />
-          <StatTile label="ORE AL TAVOLO" value={`${USER.stats.hoursPlayed}h`} sub="in 4 anni" />
-          <StatTile label="VINCITE TOTALI" value={`€${USER.stats.totalWinnings.toLocaleString('it-IT')}`} accent />
-          <StatTile label="PERDITE TOTALI" value={`€${USER.stats.totalLosses.toLocaleString('it-IT')}`} />
-          <StatTile label="WIN RATE" value={`${USER.stats.winRate}%`} sub="mani vinte allo showdown" />
-          <StatTile label="VPIP / PFR" value={`${USER.stats.vpip} / ${USER.stats.pfr}`} sub="stile leggermente tight" />
-          <StatTile label="AGGRESSION FACTOR" value={USER.stats.af} sub="bilanciato" />
-          <StatTile label="PIATTO PIÙ GROSSO" value={`€${USER.stats.biggestPot.toLocaleString('it-IT')}`} sub="Cash €1/€2 · 12 feb" accent />
+          <StatTile label="MANI GIOCATE" value={fmt(statsData?.total_hands)} sub="preflop visti" loading={loading} />
+          <StatTile label="WIN RATE"
+            value={fmtStat(statsData?.win_rate) != null ? `${fmtStat(statsData?.win_rate)}%` : '—'}
+            sub="mani vinte allo showdown"
+            tooltip={statsData?.win_rate == null && !loading ? TOOLTIP_LOW : undefined}
+            loading={loading} />
+          <StatTile label="VINCITE TOTALI"
+            value={statsData?.biggest_pot != null ? `${fmt(statsData.biggest_pot)} chips` : '—'}
+            sub="piatto più grosso vinto"
+            accent loading={loading} />
+          <StatTile label="RISULTATO NETTO"
+            value={netResult != null ? `${netResult >= 0 ? '+' : ''}${fmt(netResult)}` : '—'}
+            accent={netResult != null && netResult >= 0}
+            loading={loading} />
+          <StatTile label="VPIP"
+            value={fmtStat(statsData?.vpip) != null ? `${fmtStat(statsData?.vpip)}%` : '—'}
+            sub="volontariamente nel pot preflop"
+            tooltip={statsData?.vpip == null && !loading ? TOOLTIP_LOW : undefined}
+            loading={loading} />
+          <StatTile label="PFR"
+            value={fmtStat(statsData?.pfr) != null ? `${fmtStat(statsData?.pfr)}%` : '—'}
+            sub="preflop raise frequency"
+            tooltip={statsData?.pfr == null && !loading ? TOOLTIP_LOW : undefined}
+            loading={loading} />
+          <StatTile label="AGGRESSION FACTOR"
+            value={fmtStat(statsData?.af, 2) ?? '—'}
+            sub={statsData?.af != null ? (statsData.af < 1.5 ? 'passivo' : statsData.af < 3 ? 'bilanciato' : 'aggressivo') : undefined}
+            tooltip={statsData?.af == null && !loading ? TOOLTIP_LOW : undefined}
+            loading={loading} />
+          <StatTile label="PIATTO PIÙ GROSSO"
+            value={statsData?.biggest_pot != null ? `${fmt(statsData.biggest_pot)} chips` : '—'}
+            accent loading={loading} />
         </div>
       </div>
 
@@ -196,51 +310,74 @@ export default function Profile() {
             <div style={{ fontSize: 10, letterSpacing: '0.22em', color: '#D4AF37', marginBottom: 6 }}>STORICO PARTITE</div>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#F5F1E8' }}>Sessioni recenti</div>
           </div>
-          <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.6)' }}>
-            {winRate}% vincite · ultimi 8 giorni
-          </div>
         </div>
 
-        <div style={{ border: '1px solid rgba(212,175,55,0.12)' }}>
-          <div style={{
-            display: 'grid', gridTemplateColumns: '0.8fr 1.8fr 1fr 1fr 1fr 1fr',
-            padding: '11px 18px', background: 'rgba(212,175,55,0.04)',
-            borderBottom: '1px solid rgba(212,175,55,0.12)',
-            fontSize: 9.5, letterSpacing: '0.2em', fontWeight: 600,
-            color: 'rgba(245,241,232,0.5)',
-          }}>
-            <div>DATA</div><div>TAVOLO</div><div>DURATA</div><div>MANI</div><div>RISULTATO</div><div style={{ textAlign: 'right' }}>ESITO</div>
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[1, 2, 3].map(i => <Skel key={i} w="100%" h={52} />)}
           </div>
-          {RECENT_GAMES.map((g, i) => (
-            <div key={g.id} style={{
+        ) : !gameHistory?.length ? (
+          <div style={{
+            padding: '40px 20px', textAlign: 'center',
+            border: '1px solid rgba(212,175,55,0.12)',
+            color: 'rgba(245,241,232,0.45)', fontSize: 14,
+            fontFamily: 'Inter, sans-serif', fontStyle: 'italic',
+          }}>
+            Nessuna partita giocata ancora
+          </div>
+        ) : (
+          <div style={{ border: '1px solid rgba(212,175,55,0.12)' }}>
+            <div style={{
               display: 'grid', gridTemplateColumns: '0.8fr 1.8fr 1fr 1fr 1fr 1fr',
-              padding: '14px 18px', alignItems: 'center',
-              borderBottom: i < RECENT_GAMES.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
+              padding: '11px 18px', background: 'rgba(212,175,55,0.04)',
+              borderBottom: '1px solid rgba(212,175,55,0.12)',
+              fontSize: 9.5, letterSpacing: '0.2em', fontWeight: 600,
+              color: 'rgba(245,241,232,0.5)',
             }}>
-              <div>
-                <div style={{ fontSize: 12, color: '#F5F1E8', fontFamily: 'Inter, sans-serif' }}>{g.date}</div>
-                <div style={{ fontSize: 10.5, color: 'rgba(245,241,232,0.5)', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>{g.time}</div>
-              </div>
-              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 15, color: '#F5F1E8' }}>{g.type}</div>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'rgba(245,241,232,0.75)' }}>{g.duration}</div>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'rgba(245,241,232,0.75)' }}>{g.hands}</div>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 500, color: g.status === 'win' ? '#D4AF37' : '#c77' }}>
-                {g.result > 0 ? '+' : ''}€{Math.abs(g.result).toLocaleString('it-IT', { minimumFractionDigits: g.result % 1 !== 0 ? 2 : 0 })}
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{
-                  fontSize: 9.5, letterSpacing: '0.2em', fontWeight: 600,
-                  padding: '3px 10px',
-                  color: g.status === 'win' ? '#D4AF37' : 'rgba(245,241,232,0.55)',
-                  border: `1px solid ${g.status === 'win' ? 'rgba(212,175,55,0.4)' : 'rgba(245,241,232,0.15)'}`,
-                  fontFamily: 'Inter, sans-serif',
-                }}>
-                  {g.status === 'win' ? 'VINTA' : 'PERSA'}
-                </span>
-              </div>
+              <div>DATA</div><div>TAVOLO</div><div>DURATA</div><div>MANI</div><div>RISULTATO</div><div style={{ textAlign: 'right' }}>ESITO</div>
             </div>
-          ))}
-        </div>
+            {gameHistory.map((g, i) => {
+              const isWin = g.result_chips >= 0;
+              const tableLabel = g.table_type === 'sitgo' ? 'Sit & Go' : g.table_name;
+              const durStr = g.duration_minutes != null
+                ? g.duration_minutes >= 60
+                  ? `${Math.floor(g.duration_minutes / 60)}h ${g.duration_minutes % 60}m`
+                  : `${g.duration_minutes}m`
+                : '—';
+              return (
+                <div key={i} style={{
+                  display: 'grid', gridTemplateColumns: '0.8fr 1.8fr 1fr 1fr 1fr 1fr',
+                  padding: '14px 18px', alignItems: 'center',
+                  borderBottom: i < gameHistory.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#F5F1E8', fontFamily: 'Inter, sans-serif' }}>
+                      {g.date ? new Date(g.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }).toUpperCase() : '—'}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: 'rgba(245,241,232,0.5)', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>{g.time || '—'}</div>
+                  </div>
+                  <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 15, color: '#F5F1E8' }}>{tableLabel}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'rgba(245,241,232,0.75)' }}>{durStr}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'rgba(245,241,232,0.75)' }}>{g.hands_played}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 500, color: isWin ? '#D4AF37' : '#c77' }}>
+                    {g.result_chips >= 0 ? '+' : ''}{fmt(g.result_chips)}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{
+                      fontSize: 9.5, letterSpacing: '0.2em', fontWeight: 600,
+                      padding: '3px 10px',
+                      color: isWin ? '#D4AF37' : 'rgba(245,241,232,0.55)',
+                      border: `1px solid ${isWin ? 'rgba(212,175,55,0.4)' : 'rgba(245,241,232,0.15)'}`,
+                      fontFamily: 'Inter, sans-serif',
+                    }}>
+                      {isWin ? 'VINTA' : 'PERSA'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
