@@ -396,6 +396,16 @@ class GiocoPoker:
             return False
         del self.seats[player_id]
         self.ordine.remove(player_id)
+        # Se il tavolo è rimasto completamente vuoto, resetta allo stato iniziale
+        # così i nuovi giocatori entrano come ATTIVI e non come SEDUTO_OUT
+        if len(self.ordine) == 0:
+            self.fase = FaseGioco.IN_ATTESA
+            self.board = []
+            self.piatto = 0
+            self.piatti_parziali = []
+            self.turno_attivo = None
+            self.da_agire = set()
+            self.mazzo = None
         return True
 
     def sit_out_player(self, player_id: str):

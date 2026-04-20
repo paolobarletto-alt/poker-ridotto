@@ -738,8 +738,11 @@ async def _handle_leave_seat(
 
     seat_number = game_manager.seat_for_user(table_id, user_id)
 
+    hand_was_in_progress = game.hand_in_progress()
+    hand_num_before = game.num_mano
+
     # Se mano in corso: fold automatico
-    if game.hand_in_progress():
+    if hand_was_in_progress:
         if game.turno_attivo == user_id:
             game_manager.cancel_action_timer(table_id)
         game.sit_out_player(user_id)
@@ -786,6 +789,44 @@ async def _handle_leave_seat(
         "stack_returned": remaining_stack,
     })
     await game_manager.broadcast_state(table_id)
+
+    # Se il fold ha concluso la mano, trasmetti hand_end e persisti
+    if hand_was_in_progress and game.fase == FaseGioco.FINE_MANO and game.num_mano == hand_num_before:
+        vincite = game.vincite_mano
+        seat_map = game_manager._seat_map.get(table_id, {})
+        pid_to_seat = {pid: sn for pid, sn in seat_map.items()}
+        seat_results: dict[int, int] = {}
+        for pid in game.ordine:
+            sn = pid_to_seat.get(pid)
+            if sn is None:
+                continue
+            puntata = game.seats[pid].puntata_totale_mano
+            vincita = vincite.get(pid, 0)
+            seat_results[sn] = vincita - puntata
+        winner_name = None
+        winner_seat = None
+        winner_net = 0
+        if vincite:
+            main_pid = max(vincite, key=lambda p: vincite[p])
+            winner_name = game.seats[main_pid].nome
+            winner_seat = pid_to_seat.get(main_pid)
+            winner_net = seat_results.get(winner_seat, vincite[main_pid])
+        await game_manager.broadcast(table_id, {
+            "type": "hand_end",
+            "pot": sum(vincite.values()),
+            "winner_name": winner_name,
+            "winner_seat": winner_seat,
+            "winner_net": winner_net,
+            "seat_results": seat_results,
+            "winners": [{"player_id": pid, "amount": amt} for pid, amt in vincite.items()],
+            "log": game.log[-10:],
+        })
+        async with AsyncSessionLocal() as db:
+            tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
+            db_table_fresh = tbl_res.scalar_one_or_none()
+            if db_table_fresh:
+                await _persist_hand_end(db, db_table_fresh, game, game.num_mano)
+                await handle_sitgo_hand_end(table_id, db)
 
     # Torna a "waiting" se non ci sono abbastanza giocatori
     active = game.players_active_count()
