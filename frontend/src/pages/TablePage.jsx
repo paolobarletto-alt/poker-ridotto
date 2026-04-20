@@ -10,6 +10,7 @@ import { usePokerTable } from '../hooks/usePokerTable';
 import { useTableChat } from '../hooks/useTableChat';
 import PokerTable from '../components/Table';
 import { GoldButton } from '../components/Shell';
+import { useAuth } from '../context/AuthContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Overlay conferma abbandono + riepilogo sessione
@@ -83,6 +84,7 @@ function LeaveOverlay({ step, pnl, onConfirm, onCancel, onGoLobby }) {
 export default function TablePage() {
   const { id: tableId } = useParams();
   const navigate        = useNavigate();
+  const { user }        = useAuth();
 
   // Bridge ref: usePokerTable dispatches chat events → useTableChat receives them
   const chatCallbackRef = useRef(null);
@@ -113,6 +115,7 @@ export default function TablePage() {
     sendChat,
     joinSeat,
     leaveSeat,
+    sendRebuy,
     isTournament,
     tournament,
     blindLevelEndsAt,
@@ -145,25 +148,8 @@ export default function TablePage() {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
 
-      {/* ── Banner riconnessione ─────────────────────────────────────────── */}
-      {reconnecting && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1200,
-          background: 'linear-gradient(90deg, #5a3200, #8a5200)',
-          borderBottom: '1px solid rgba(212,175,55,0.5)',
-          padding: '8px 20px',
-          display: 'flex', alignItems: 'center', gap: 10,
-          fontFamily: 'Inter, sans-serif', fontSize: 12,
-          color: '#F5F1E8', letterSpacing: '0.08em',
-        }}>
-          <span style={{ display: 'inline-block', animation: 'ridotto-spin 1s linear infinite' }}>⟳</span>
-          Riconnessione in corso…
-          <style>{`@keyframes ridotto-spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      )}
-
-      {/* ── Overlay connessione persa (tentativi esauriti) ───────────────── */}
-      {!connected && !reconnecting && (
+      {/* ── Overlay connessione (caricamento / riconnessione / persa) ───────── */}
+      {!connected && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1100,
           background: 'rgba(5,10,7,0.93)',
@@ -171,30 +157,41 @@ export default function TablePage() {
           alignItems: 'center', justifyContent: 'center',
           backdropFilter: 'blur(8px)',
         }}>
+          <style>{`
+            @keyframes ridotto-spin { to { transform: rotate(360deg); } }
+          `}</style>
           <div style={{
-            fontFamily: 'Playfair Display, serif', fontSize: 32,
-            color: '#F5F1E8', fontStyle: 'italic', marginBottom: 12,
+            width: 56, height: 56, borderRadius: '50%',
+            border: '4px solid rgba(212,175,55,0.2)',
+            borderTopColor: '#D4AF37',
+            animation: 'ridotto-spin 0.9s linear infinite',
+            marginBottom: 28,
+          }} />
+          <div style={{
+            fontFamily: 'Playfair Display, serif', fontSize: 24,
+            color: '#F5F1E8', fontStyle: 'italic', marginBottom: 8,
           }}>
-            Connessione persa
+            Caricamento
           </div>
           <div style={{
-            fontFamily: 'Inter, sans-serif', fontSize: 13,
-            color: 'rgba(245,241,232,0.45)', marginBottom: 36, letterSpacing: '0.06em',
+            fontFamily: 'Inter, sans-serif', fontSize: 12,
+            color: 'rgba(245,241,232,0.4)', letterSpacing: '0.1em', marginBottom: 36,
           }}>
-            Impossibile raggiungere il server
+            {reconnecting ? 'Riconnessione in corso…' : 'Connessione al server…'}
           </div>
-          <button
-            onClick={() => navigate('/lobby')}
-            style={{
-              background: 'transparent', border: '1px solid rgba(212,175,55,0.4)',
-              color: '#D4AF37', padding: '10px 28px',
-              fontFamily: 'Inter, sans-serif', fontSize: 12,
-              letterSpacing: '0.15em', cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            TORNA ALLA LOBBY
-          </button>
+          {!reconnecting && (
+            <button
+              onClick={() => navigate('/lobby')}
+              style={{
+                background: 'transparent', border: '1px solid rgba(212,175,55,0.3)',
+                color: 'rgba(212,175,55,0.6)', padding: '8px 24px',
+                fontFamily: 'Inter, sans-serif', fontSize: 11,
+                letterSpacing: '0.15em', cursor: 'pointer',
+              }}
+            >
+              TORNA ALLA LOBBY
+            </button>
+          )}
         </div>
       )}
 
@@ -232,6 +229,8 @@ export default function TablePage() {
           sendMessage={sendMessage}
           joinSeat={joinSeat}
           leaveSeat={leaveSeat}
+          sendRebuy={sendRebuy}
+          profileBalance={user?.chips_balance ?? 0}
           onLeave={handleLeaveRequest}
           cardBack="ridotto"
           isTournament={isTournament}
