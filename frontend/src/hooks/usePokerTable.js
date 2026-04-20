@@ -351,7 +351,21 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
       // ── Attesa giocatori ────────────────────────────────────────────────
       case 'waiting_players':
         setWaitingForPlayers(msg.needed ?? null);
-        setTableState((prev) => ({ ...prev, phase: 'waiting', acting_seat: null }));
+        // Resetta lo stato visivo come se il giocatore rimasto si fosse appena seduto:
+        // pulisce carte, piatto, azioni sui posti — lascia che winner toast scada da solo
+        setTableState((prev) => ({
+          ...prev,
+          phase:         'waiting',
+          acting_seat:   null,
+          timer_seconds: 0,
+          pot:           0,
+          community:     [],
+          seats: prev.seats.map((s) =>
+            s ? { ...s, last_action: null, bet_in_round: 0, is_dealer: false, is_sb: false, is_bb: false } : s
+          ),
+        }));
+        setMyCards([]);
+        setSeatDeltas({});
         setGameStartingIn(null);
         stopCountdown();
         pushLog(`In attesa di ${msg.needed ?? '?'} giocatore/i`);
