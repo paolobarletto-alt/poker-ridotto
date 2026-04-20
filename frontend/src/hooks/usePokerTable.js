@@ -77,6 +77,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
   const [handLog,           setHandLog]           = useState([]);
   const [handWinner,        setHandWinner]        = useState(null); // {name, seat, amount}
   const [seatDeltas,        setSeatDeltas]        = useState({});   // {seat: delta}
+  const [timerTrigger,      setTimerTrigger]      = useState(0);    // incrementa ad ogni action_timer
 
   // ── Stato torneo ──────────────────────────────────────────────────────────
   const [isTournament,      setIsTournament]      = useState(false);
@@ -282,7 +283,10 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           acting_seat:   msg.seat ?? prev.acting_seat,
           timer_seconds: msg.seconds ?? 0,
         }));
-        if (msg.seconds > 0) startCountdown(msg.seconds);
+        if (msg.seconds > 0) {
+          setTimerTrigger((k) => k + 1);
+          startCountdown(msg.seconds);
+        }
         break;
 
       // ── Showdown ────────────────────────────────────────────────────────
@@ -642,6 +646,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
     gameStartingIn,
     handWinner,
     seatDeltas,
+    timerTrigger,
     // Torneo
     isTournament,
     tournament,

@@ -452,7 +452,7 @@ function ActionTimerBar({ timerSeconds, actingKey }) {
 function Seat({
   seatIndex, seat, pos, betOffset,
   isHero, myCards,
-  isActing, timerSeconds, actingKey,
+  isActing, timerSeconds, timerTrigger,
   phase, cardBack,
   showdownResult,
   seatDelta,
@@ -460,7 +460,8 @@ function Seat({
 }) {
   const isWinner  = showdownResult?.won === true;
   const isFolded  = seat?.status === 'folded';
-  const hasCards  = !isFolded && phase !== 'waiting';
+  const isSitOut  = seat?.status === 'sit_out' || seat?.status === 'seduto_out';
+  const hasCards  = !isFolded && !isSitOut && phase !== 'waiting';
   const revealCards = showdownResult?.cards;
 
   // ── Posto vuoto ──────────────────────────────────────────────────────────
@@ -495,7 +496,7 @@ function Seat({
   return (
     <div style={{
       position: 'absolute', ...pos, width: 150, transform: 'translate(-50%,-50%)',
-      textAlign: 'center', opacity: isFolded ? 0.38 : 1, transition: 'opacity 0.3s',
+      textAlign: 'center', opacity: isFolded ? 0.38 : isSitOut ? 0.55 : 1, transition: 'opacity 0.3s',
       zIndex: isActing ? 2 : 1,
     }}>
 
@@ -524,7 +525,7 @@ function Seat({
       }}>
         {/* Timer bar */}
         {isActing && (
-          <ActionTimerBar timerSeconds={timerSeconds} actingKey={actingKey} />
+          <ActionTimerBar timerSeconds={timerSeconds} actingKey={timerTrigger} />
         )}
 
         <div style={{ padding: '7px 10px 9px' }}>
@@ -575,13 +576,16 @@ function Seat({
       )}
 
       {/* ── Ultima azione ──────────────────────────────────────────────── */}
-      {seat.last_action && !isFolded && (
+      {seat.last_action && !isFolded && !isSitOut && (
         <div style={{ marginTop: 3, fontSize: 9, letterSpacing: '0.18em', fontWeight: 600, color: '#D4AF37', fontFamily: 'Inter, sans-serif' }}>
           {seat.last_action.toUpperCase()}
         </div>
       )}
       {isFolded && (
         <div style={{ marginTop: 3, fontSize: 9, letterSpacing: '0.18em', fontWeight: 600, color: 'rgba(245,241,232,0.4)', fontFamily: 'Inter, sans-serif' }}>FOLD</div>
+      )}
+      {isSitOut && (
+        <div style={{ marginTop: 3, fontSize: 9, letterSpacing: '0.18em', fontWeight: 600, color: 'rgba(245,241,232,0.5)', fontFamily: 'Inter, sans-serif', background: 'rgba(0,0,0,0.5)', padding: '1px 5px' }}>SIT OUT</div>
       )}
 
       {/* ── Chips puntata ──────────────────────────────────────────────── */}
@@ -614,6 +618,7 @@ export default function PokerTable({
   gameStartingIn    = null,
   handWinner        = null,
   seatDeltas        = {},
+  timerTrigger      = 0,
   lastError         = null,
   handLog           = [],
   messages          = [],
@@ -660,9 +665,6 @@ export default function PokerTable({
   const myStack    = mySeatData?.stack ?? 0;
   const bigBlind   = tableConfig?.big_blind ?? 10;
   const minRaise   = Math.max(callAmount + bigBlind, bigBlind);
-
-  // Acting key: cambia quando tocca a un nuovo giocatore → resetta la timer bar
-  const actingKey = `${actingSeat}-${handNumber}`;
 
   // ── Reset raise amount al proprio turno ───────────────────────────────────
   useEffect(() => {
@@ -811,12 +813,12 @@ export default function PokerTable({
                 myCards={mySeat === idx ? myCards : []}
                 isActing={actingSeat === idx}
                 timerSeconds={timerSecs}
-                actingKey={actingKey}
+                timerTrigger={timerTrigger}
                 phase={phase}
                 cardBack={cardBack}
                 showdownResult={showdownResults?.find((r) => r.seat === idx) ?? null}
                 onEmptyClick={() => handleSeatClick(idx)}
-                seatDelta={seatDeltas[idx] ?? null}
+                seatDelta={seatDeltas[String(idx)] ?? seatDeltas[idx] ?? null}
               />
             ))}
 

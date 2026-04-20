@@ -35,6 +35,7 @@ export default function TablePage() {
     gameStartingIn,
     handWinner,
     seatDeltas,
+    timerTrigger,
     sendAction,
     sendChat,
     joinSeat,
@@ -127,6 +128,7 @@ export default function TablePage() {
           gameStartingIn={gameStartingIn}
           handWinner={handWinner}
           seatDeltas={seatDeltas}
+          timerTrigger={timerTrigger}
           messages={messages}
           sendAction={sendAction}
           sendMessage={sendMessage}
