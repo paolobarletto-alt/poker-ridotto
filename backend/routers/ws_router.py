@@ -935,10 +935,12 @@ async def _handle_rebuy(
         ))
         await db.commit()
 
-    # Aggiorna stack nell'engine
+    # Aggiorna stack nell'engine e rimetti ATTIVO se era SEDUTO_OUT
     engine_seat = game.seats.get(user_id)
     if engine_seat:
         engine_seat.stack += amount
+        if engine_seat.stato == StatoSeat.SEDUTO_OUT and engine_seat.stack > 0:
+            engine_seat.stato = StatoSeat.ATTIVO
 
     # Notifica tutti del rebuy
     await game_manager.broadcast(table_id, {
@@ -949,6 +951,11 @@ async def _handle_rebuy(
         "new_stack": engine_seat.stack if engine_seat else db_seat.stack + amount,
     })
     await game_manager.broadcast_state(table_id)
+
+    # Avvia nuova mano se ora ci sono abbastanza giocatori attivi
+    active = game.players_active_count()
+    if active >= db_table.min_players and not game.hand_in_progress():
+        asyncio.create_task(_delayed_start_hand(table_id, db_table, game, delay=2, show_countdown=False))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

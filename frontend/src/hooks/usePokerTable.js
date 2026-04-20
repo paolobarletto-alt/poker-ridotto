@@ -525,6 +525,11 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
 
       // ── Rebuy completato ─────────────────────────────────────────────────
       case 'rebuy_done':
+        // Il rebuy è un buy-in aggiuntivo: va sommato al sessionBuyin
+        // così la P&L della sessione rimane corretta (rebuy ≠ guadagno)
+        if (msg.username === user?.username) {
+          setSessionBuyin((prev) => prev + (msg.amount ?? 0));
+        }
         // Aggiorna saldo profilo nel contesto auth
         refreshUser();
         pushLog(`${msg.username} ha ricaricato +${msg.amount?.toLocaleString('it-IT')} chips`);
