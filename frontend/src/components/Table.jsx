@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoldButton } from './Shell';
 import BuyinDialog from './BuyinDialog';
+import { useAuth } from '../context/AuthContext';
 
 // ── Keyframes injected once ──────────────────────────────────────────────────
 const _STYLES = `
@@ -595,6 +596,7 @@ export default function PokerTable({
   showdownResults   = null,
   handEndResult     = null,
   waitingForPlayers = null,
+  gameStartingIn    = null,
   lastError         = null,
   handLog           = [],
   messages          = [],
@@ -615,6 +617,7 @@ export default function PokerTable({
   // ── Stato locale UI ───────────────────────────────────────────────────────
   const [sidebarTab,   setSidebarTab]   = useState('mano');
   const [chatInput,    setChatInput]    = useState('');
+  const { user } = useAuth();
   const [showBuyin,    setShowBuyin]    = useState(false);
   const [selectedSeat, setSelectedSeat] = useState(null);
   const [raiseAmt,     setRaiseAmt]     = useState(20);
@@ -1013,11 +1016,39 @@ export default function PokerTable({
       {/* ── BuyinDialog ─────────────────────────────────────────────────── */}
       {showBuyin && selectedSeat !== null && (
         <BuyinDialog
+          isOpen={true}
           seat={selectedSeat}
-          tableInfo={tableConfig}
+          tableConfig={tableConfig}
+          userBalance={user?.chips_balance ?? 0}
           onConfirm={(seat, amount) => { joinSeat?.(seat, amount); setShowBuyin(false); setSelectedSeat(null); }}
-          onCancel={() => { setShowBuyin(false); setSelectedSeat(null); }}
+          onClose={() => { setShowBuyin(false); setSelectedSeat(null); }}
         />
+      )}
+
+      {/* ── Countdown inizio partita ─────────────────────────────────────── */}
+      {gameStartingIn !== null && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 50,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            background: 'rgba(0,0,0,0.72)',
+            border: '1px solid rgba(212,175,55,0.3)',
+            borderRadius: 16,
+            padding: '32px 56px',
+            textAlign: 'center',
+            backdropFilter: 'blur(6px)',
+          }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.25em', color: 'rgba(212,175,55,0.6)', fontFamily: 'Inter, sans-serif', marginBottom: 10 }}>
+              LA PARTITA INIZIA TRA
+            </div>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 72, color: '#D4AF37', lineHeight: 1, fontWeight: 700 }}>
+              {gameStartingIn}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Tournament end overlay ───────────────────────────────────────── */}

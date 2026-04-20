@@ -78,6 +78,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
 
   // ── Stato torneo ──────────────────────────────────────────────────────────
   const [isTournament,      setIsTournament]      = useState(false);
+  const [gameStartingIn,    setGameStartingIn]    = useState(null); // countdown secondi
   const [tournament,        setTournament]        = useState(null);
   const [blindLevelEndsAt,  setBlindLevelEndsAt]  = useState(null);
   const [eliminatedPlayers, setEliminatedPlayers] = useState([]);
@@ -321,9 +322,28 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
       case 'waiting_players':
         setWaitingForPlayers(msg.needed ?? null);
         setTableState((prev) => ({ ...prev, phase: 'waiting', acting_seat: null }));
+        setGameStartingIn(null);
         stopCountdown();
         pushLog(`In attesa di ${msg.needed ?? '?'} giocatore/i`);
         break;
+
+      case 'game_starting': {
+        const secs = msg.countdown ?? 3;
+        setGameStartingIn(secs);
+        setWaitingForPlayers(null);
+        // decrementa ogni secondo
+        let remaining = secs;
+        const iv = setInterval(() => {
+          remaining -= 1;
+          if (remaining <= 0) {
+            clearInterval(iv);
+            setGameStartingIn(null);
+          } else {
+            setGameStartingIn(remaining);
+          }
+        }, 1000);
+        break;
+      }
 
       // ── Giocatore si siede ──────────────────────────────────────────────
       case 'player_joined':
@@ -587,6 +607,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
     waitingForPlayers,
     lastError,
     handLog,
+    gameStartingIn,
     // Torneo
     isTournament,
     tournament,

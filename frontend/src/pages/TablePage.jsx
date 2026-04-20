@@ -32,6 +32,7 @@ export default function TablePage() {
     waitingForPlayers,
     lastError,
     handLog,
+    gameStartingIn,
     sendAction,
     sendChat,
     joinSeat,
@@ -121,6 +122,7 @@ export default function TablePage() {
           waitingForPlayers={waitingForPlayers}
           lastError={lastError}
           handLog={handLog}
+          gameStartingIn={gameStartingIn}
           messages={messages}
           sendAction={sendAction}
           sendMessage={sendMessage}

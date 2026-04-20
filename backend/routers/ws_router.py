@@ -912,6 +912,10 @@ async def _delayed_start_hand(
     delay: float = 3.0,
 ):
     """Attende delay secondi poi avvia una nuova mano se le condizioni sono soddisfatte."""
+    await game_manager.broadcast(table_id, {
+        "type": "game_starting",
+        "countdown": int(delay),
+    })
     await asyncio.sleep(delay)
 
     if game.hand_in_progress():
