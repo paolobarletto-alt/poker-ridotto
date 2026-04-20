@@ -461,7 +461,7 @@ function Seat({
   const isWinner  = showdownResult?.won === true;
   const isFolded  = seat?.status === 'folded';
   const isSitOut  = seat?.status === 'sit_out' || seat?.status === 'seduto_out';
-  const hasCards  = !isFolded && !isSitOut && phase !== 'waiting';
+  const hasCards  = !isFolded && !isSitOut && phase !== 'waiting' && phase !== 'in_attesa';
   const revealCards = showdownResult?.cards;
 
   // ── Posto vuoto ──────────────────────────────────────────────────────────

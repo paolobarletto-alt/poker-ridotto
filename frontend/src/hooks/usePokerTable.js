@@ -365,6 +365,8 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           ),
         }));
         setMyCards([]);
+        setShowdownResults(null);
+        setHandEndResult(null);
         setSeatDeltas({});
         setGameStartingIn(null);
         stopCountdown();
