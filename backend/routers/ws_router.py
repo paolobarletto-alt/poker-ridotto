@@ -981,7 +981,7 @@ async def _handle_busted_players(table_id: str, game: Any, db_table_id) -> None:
         logger.info("Giocatore %s (posto %s) a 0 chips → sit-out", nome, seat_num)
 
 
-
+async def _delayed_start_hand(
     table_id: str,
     db_table: PokerTable,
     game: Any,
