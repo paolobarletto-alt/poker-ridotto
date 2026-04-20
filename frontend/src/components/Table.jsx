@@ -475,9 +475,9 @@ function Seat({
         title={`Siediti al posto ${seatIndex + 1}`}
       >
         <div
-          style={{ width: 62, height: 62, borderRadius: '50%', border: '1px dashed rgba(212,175,55,0.25)', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(212,175,55,0.35)', fontSize: 9.5, letterSpacing: '0.2em', fontFamily: 'Inter, sans-serif', transition: 'border-color 0.2s, color 0.2s' }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.6)'; e.currentTarget.style.color = 'rgba(212,175,55,0.7)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.25)'; e.currentTarget.style.color = 'rgba(212,175,55,0.35)'; }}
+          style={{ width: 72, height: 72, borderRadius: '50%', border: '2px dashed rgba(212,175,55,0.6)', background: 'rgba(212,175,55,0.07)', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(212,175,55,0.75)', fontSize: 10, letterSpacing: '0.2em', fontFamily: 'Inter, sans-serif', transition: 'all 0.2s', boxShadow: '0 0 12px rgba(212,175,55,0.12)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#D4AF37'; e.currentTarget.style.color = '#D4AF37'; e.currentTarget.style.background = 'rgba(212,175,55,0.15)'; e.currentTarget.style.boxShadow = '0 0 18px rgba(212,175,55,0.3)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.6)'; e.currentTarget.style.color = 'rgba(212,175,55,0.75)'; e.currentTarget.style.background = 'rgba(212,175,55,0.07)'; e.currentTarget.style.boxShadow = '0 0 12px rgba(212,175,55,0.12)'; }}
         >
           VUOTO
         </div>
@@ -513,14 +513,20 @@ function Seat({
 
       {/* ── Nameplate ──────────────────────────────────────────────────── */}
       <div style={{
-        background: isActing ? 'linear-gradient(180deg,rgba(212,175,55,0.22),rgba(212,175,55,0.07))' : 'rgba(0,0,0,0.68)',
-        border: isActing ? '1px solid #D4AF37' : '1px solid rgba(212,175,55,0.14)',
-        backdropFilter: 'blur(6px)',
+        background: isHero
+          ? 'linear-gradient(180deg,rgba(212,175,55,0.28),rgba(212,175,55,0.10))'
+          : isActing ? 'linear-gradient(180deg,rgba(212,175,55,0.22),rgba(212,175,55,0.07))' : 'rgba(0,0,0,0.82)',
+        border: isHero
+          ? '1.5px solid rgba(212,175,55,0.85)'
+          : isActing ? '1px solid #D4AF37' : '1px solid rgba(212,175,55,0.22)',
+        backdropFilter: 'blur(8px)',
         transition: 'border-color 0.2s, background 0.2s',
         overflow: 'hidden',
         boxShadow: isWinner
           ? undefined
-          : isActing ? '0 0 18px rgba(212,175,55,0.35)' : 'none',
+          : isHero
+            ? '0 0 22px rgba(212,175,55,0.45), inset 0 0 12px rgba(212,175,55,0.08)'
+            : isActing ? '0 0 18px rgba(212,175,55,0.35)' : '0 2px 8px rgba(0,0,0,0.6)',
         ...(isWinner ? { animation: 'ridotto-win-pulse 1.2s ease-in-out infinite' } : {}),
       }}>
         {/* Timer bar */}
@@ -528,21 +534,21 @@ function Seat({
           <ActionTimerBar timerSeconds={timerSeconds} actingKey={timerTrigger} />
         )}
 
-        <div style={{ padding: '7px 10px 9px' }}>
+        <div style={{ padding: '8px 12px 10px' }}>
           {/* Nome + badge "TU" */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginBottom: 2 }}>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 500, color: '#F5F1E8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 88 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginBottom: 3 }}>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: isHero ? 13 : 12, fontWeight: isHero ? 600 : 500, color: '#F5F1E8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 96, letterSpacing: isHero ? '-0.01em' : 'normal' }}>
               {seat.username}
             </div>
             {isHero && (
-              <div style={{ fontSize: 7.5, letterSpacing: '0.15em', color: '#D4AF37', background: 'rgba(212,175,55,0.12)', border: '1px solid rgba(212,175,55,0.35)', padding: '1px 4px', flexShrink: 0 }}>
+              <div style={{ fontSize: 8, letterSpacing: '0.15em', color: '#0a0a0a', background: '#D4AF37', padding: '2px 5px', flexShrink: 0, fontWeight: 700, fontFamily: 'Inter, sans-serif' }}>
                 TU
               </div>
             )}
           </div>
 
           {/* Stack */}
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: isActing ? '#D4AF37' : 'rgba(245,241,232,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: isHero ? 13 : 12, fontWeight: isHero ? 600 : 400, color: isHero ? '#D4AF37' : isActing ? '#D4AF37' : 'rgba(245,241,232,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
             {seat.stack.toLocaleString('it-IT')}
             {seatDelta != null && seatDelta !== 0 && (
               <span style={{
@@ -602,6 +608,98 @@ function Seat({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RebuyWidget — saldo profilo + ricarica
+// ─────────────────────────────────────────────────────────────────────────────
+
+function RebuyWidget({ profileBalance, myStack, showRebuy, setShowRebuy, sendRebuy }) {
+  const [customAmt, setCustomAmt] = useState('');
+  const canRebuy = myStack === 0;
+
+  const doRebuy = (amt) => {
+    const n = parseInt(amt, 10);
+    if (!n || n <= 0) return;
+    sendRebuy?.(n);
+    setShowRebuy(false);
+    setCustomAmt('');
+  };
+
+  const presets = [100, 200, 500, 1000].filter(a => a <= profileBalance);
+
+  return (
+    <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(212,175,55,0.1)', background: 'rgba(212,175,55,0.03)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showRebuy ? 10 : 0 }}>
+        <div>
+          <div style={{ fontSize: 8.5, letterSpacing: '0.2em', color: 'rgba(245,241,232,0.4)', fontFamily: 'Inter, sans-serif', marginBottom: 2 }}>SALDO PROFILO</div>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 14, fontWeight: 600, color: '#D4AF37' }}>
+            {profileBalance.toLocaleString('it-IT')} chips
+          </div>
+        </div>
+        {canRebuy && (
+          <button
+            onClick={() => { setShowRebuy(v => !v); setCustomAmt(''); }}
+            style={{ background: showRebuy ? 'rgba(212,175,55,0.18)' : 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.35)', color: '#D4AF37', fontSize: 10, letterSpacing: '0.14em', fontFamily: 'Inter, sans-serif', fontWeight: 600, padding: '5px 10px', cursor: 'pointer', transition: 'all 0.15s' }}
+          >
+            {showRebuy ? 'CHIUDI' : '+ RICARICA'}
+          </button>
+        )}
+      </div>
+
+      {canRebuy && showRebuy && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {profileBalance === 0 ? (
+            <div style={{ textAlign: 'center', fontSize: 10.5, color: 'rgba(245,241,232,0.4)', fontFamily: 'Inter, sans-serif', padding: '4px 0' }}>
+              Saldo profilo esaurito
+            </div>
+          ) : (
+            <>
+              {/* Preset rapidi */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {presets.map(amt => (
+                  <button
+                    key={amt}
+                    onClick={() => doRebuy(amt)}
+                    style={{ flex: '1 1 calc(50% - 3px)', background: 'rgba(212,175,55,0.06)', border: '1px solid rgba(212,175,55,0.28)', color: 'rgba(245,241,232,0.85)', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', padding: '7px 0', cursor: 'pointer', transition: 'all 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,175,55,0.16)'; e.currentTarget.style.color = '#D4AF37'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(212,175,55,0.06)'; e.currentTarget.style.color = 'rgba(245,241,232,0.85)'; }}
+                  >
+                    +{amt.toLocaleString('it-IT')}
+                  </button>
+                ))}
+              </div>
+
+              {/* Input importo personalizzato */}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={profileBalance}
+                  placeholder="Importo personalizzato…"
+                  value={customAmt}
+                  onChange={e => setCustomAmt(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && doRebuy(customAmt)}
+                  style={{
+                    flex: 1, background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(212,175,55,0.3)',
+                    color: '#F5F1E8', fontSize: 12, fontFamily: 'JetBrains Mono, monospace',
+                    padding: '6px 10px', outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={() => doRebuy(customAmt)}
+                  disabled={!customAmt || parseInt(customAmt) <= 0 || parseInt(customAmt) > profileBalance}
+                  style={{ background: 'rgba(212,175,55,0.12)', border: '1px solid rgba(212,175,55,0.4)', color: '#D4AF37', fontSize: 11, fontFamily: 'Inter, sans-serif', fontWeight: 600, padding: '6px 12px', cursor: 'pointer', letterSpacing: '0.08em', opacity: (!customAmt || parseInt(customAmt) <= 0 || parseInt(customAmt) > profileBalance) ? 0.4 : 1 }}
+                >
+                  OK
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PokerTable — componente principale
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -626,6 +724,8 @@ export default function PokerTable({
   sendMessage,
   joinSeat,
   leaveSeat,
+  sendRebuy,
+  profileBalance    = 0,
   onLeave,
   cardBack          = 'ridotto',
   // ── Tournament ─────────────────────────────────────────────────────────────
@@ -639,6 +739,7 @@ export default function PokerTable({
   // ── Stato locale UI ───────────────────────────────────────────────────────
   const [sidebarTab,   setSidebarTab]   = useState('mano');
   const [chatInput,    setChatInput]    = useState('');
+  const [showRebuy,    setShowRebuy]    = useState(false);
   const { user } = useAuth();
   const [showBuyin,    setShowBuyin]    = useState(false);
   const [selectedSeat, setSelectedSeat] = useState(null);
@@ -761,9 +862,9 @@ export default function PokerTable({
           <div style={{ position: 'relative', width: '100%', height: '100%', maxWidth: 900, margin: '0 auto' }}>
 
             {/* Feltro */}
-            <div style={{ position: 'absolute', inset: '8% 3%', background: 'radial-gradient(ellipse at center,#1a4a2e 0%,#0a2418 65%,#05140c 100%)', borderRadius: '50%', border: '8px solid #2a1e10', boxShadow: 'inset 0 0 50px rgba(0,0,0,0.55),0 20px 60px rgba(0,0,0,0.55)' }}>
-              <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', border: '1px solid rgba(212,175,55,0.09)' }} />
-              <div style={{ position: 'absolute', top: '27%', left: '50%', transform: 'translateX(-50%)', fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'rgba(212,175,55,0.1)', fontStyle: 'italic', userSelect: 'none', whiteSpace: 'nowrap' }}>
+            <div style={{ position: 'absolute', inset: '8% 3%', background: 'radial-gradient(ellipse at center,#2d7a4a 0%,#1a5233 55%,#0e2e1c 100%)', borderRadius: '50%', border: '8px solid #3a2a12', boxShadow: 'inset 0 0 40px rgba(0,0,0,0.35),0 20px 60px rgba(0,0,0,0.55),inset 0 0 80px rgba(45,122,74,0.15)' }}>
+              <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', border: '1px solid rgba(212,175,55,0.18)' }} />
+              <div style={{ position: 'absolute', top: '27%', left: '50%', transform: 'translateX(-50%)', fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'rgba(212,175,55,0.18)', fontStyle: 'italic', userSelect: 'none', whiteSpace: 'nowrap' }}>
                 Ridotto
               </div>
 
@@ -927,6 +1028,17 @@ export default function PokerTable({
         {/* ── Sidebar destra ────────────────────────────────────────────── */}
         <div style={{ width: 262, flexShrink: 0, borderLeft: '1px solid rgba(212,175,55,0.1)', background: 'rgba(0,0,0,0.28)', display: 'flex', flexDirection: 'column' }}>
 
+          {/* ── Saldo profilo + ricarica ────────────────────────────────── */}
+          {mySeat !== null && (
+            <RebuyWidget
+              profileBalance={profileBalance}
+              myStack={myStack}
+              showRebuy={showRebuy}
+              setShowRebuy={setShowRebuy}
+              sendRebuy={sendRebuy}
+            />
+          )}
+
           {/* Tab toggle */}
           <div style={{ display: 'flex', borderBottom: '1px solid rgba(212,175,55,0.1)', flexShrink: 0 }}>
             {['mano', 'chat'].map((tab) => {
@@ -1045,29 +1157,56 @@ export default function PokerTable({
         />
       )}
 
-      {/* ── Toast vincitore mano ─────────────────────────────────────────── */}
+      {/* ── Toast vincitore / pareggio ──────────────────────────────────── */}
       {handWinner && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 40,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           pointerEvents: 'none',
         }}>
-          <div style={{
-            background: 'rgba(0,0,0,0.78)',
-            border: '1px solid rgba(212,175,55,0.45)',
-            borderRadius: 14,
-            padding: '22px 48px',
-            textAlign: 'center',
-            backdropFilter: 'blur(8px)',
-            animation: 'fadeInOut 3s forwards',
-          }}>
-            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: '#D4AF37', fontWeight: 600 }}>
-              🏆 {handWinner.name} vince!
+          {handWinner.is_split ? (
+            /* ── PAREGGIO ── */
+            <div style={{
+              background: 'rgba(0,0,0,0.82)',
+              border: '2px solid rgba(100,200,255,0.55)',
+              borderRadius: 14,
+              padding: '22px 48px',
+              textAlign: 'center',
+              backdropFilter: 'blur(8px)',
+              animation: 'fadeInOut 4s forwards',
+            }}>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 26, color: '#7EC8E3', fontWeight: 700, letterSpacing: 1 }}>
+                🤝 PAREGGIO!
+              </div>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#aaa', marginTop: 4, marginBottom: 10 }}>
+                Piatto diviso — {(handWinner.pot ?? 0).toLocaleString('it-IT')} chips totali
+              </div>
+              {handWinner.players?.map((p, i) => (
+                <div key={i} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 15, color: '#F5F1E8', marginTop: 4 }}>
+                  <span style={{ color: '#7EC8E3', fontWeight: 600 }}>{p.name}</span>
+                  {' '}+{(p.amount ?? 0).toLocaleString('it-IT')} chips
+                </div>
+              ))}
             </div>
-            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 16, color: '#F5F1E8', marginTop: 6 }}>
-              +{Math.abs(handWinner.amount).toLocaleString('it-IT')} chips
+          ) : (
+            /* ── VINCITORE SINGOLO ── */
+            <div style={{
+              background: 'rgba(0,0,0,0.78)',
+              border: '1px solid rgba(212,175,55,0.45)',
+              borderRadius: 14,
+              padding: '22px 48px',
+              textAlign: 'center',
+              backdropFilter: 'blur(8px)',
+              animation: 'fadeInOut 4s forwards',
+            }}>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: '#D4AF37', fontWeight: 600 }}>
+                🏆 {handWinner.name} vince!
+              </div>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 16, color: '#F5F1E8', marginTop: 6 }}>
+                +{Math.abs(handWinner.amount ?? 0).toLocaleString('it-IT')} chips
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

@@ -61,7 +61,7 @@ const INITIAL_TABLE_STATE = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function usePokerTable(tableId, { onChatMessage } = {}) {
-  const { user, token } = useAuth();
+  const { user, token, updateBalance, refreshUser } = useAuth();
 
   // ── Stato principale ──────────────────────────────────────────────────────
   const [tableState,        setTableState]        = useState(INITIAL_TABLE_STATE);
@@ -321,24 +321,30 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           () => setHandEndResult(null), HAND_END_TTL
         );
 
-        // Vincitore principale — toast per tutti
-        if (msg.winner_name) {
-          clearTimeout(handWinnerClearRef.current);
-          setHandWinner({ name: msg.winner_name, seat: msg.winner_seat ?? null, amount: msg.winner_net ?? 0 });
-          handWinnerClearRef.current = setTimeout(() => setHandWinner(null), 3000);
+        // Vincitore / pareggio — toast per tutti
+        clearTimeout(handWinnerClearRef.current);
+        if (msg.is_split && msg.split_winners?.length > 1) {
+          setHandWinner({
+            is_split: true,
+            players: msg.split_winners,   // [{name, seat, amount}]
+            pot: msg.pot ?? 0,
+          });
+          pushLog(`PAREGGIO! Piatto diviso: ${msg.split_winners.map(w => `${w.name} +${w.amount}`).join(' / ')}`);
+        } else if (msg.winner_name) {
+          setHandWinner({ is_split: false, name: msg.winner_name, seat: msg.winner_seat ?? null, amount: msg.winner_net ?? 0 });
+          if (result.hand_description)
+            pushLog(`Mano vinta: ${result.hand_description} — €${result.pot_won}`);
+          else if (result.pot_won)
+            pushLog(`Piatto vinto: €${result.pot_won}`);
         }
+        handWinnerClearRef.current = setTimeout(() => setHandWinner(null), 4000);
 
         // Delta per seat — flash +/- su ogni posto
         if (msg.seat_results && Object.keys(msg.seat_results).length > 0) {
           clearTimeout(seatDeltasClearRef.current);
           setSeatDeltas(msg.seat_results);
-          seatDeltasClearRef.current = setTimeout(() => setSeatDeltas({}), 3000);
+          seatDeltasClearRef.current = setTimeout(() => setSeatDeltas({}), 4000);
         }
-
-        if (result.hand_description)
-          pushLog(`Mano vinta: ${result.hand_description} — €${result.pot_won}`);
-        else if (result.pot_won)
-          pushLog(`Piatto vinto: €${result.pot_won}`);
         break;
       }
 
@@ -399,7 +405,11 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
 
       // ── Giocatore lascia ────────────────────────────────────────────────
       case 'player_left':
-        if (msg.username === user?.username) { setMySeat(null); setMyCards([]); setSessionBuyin(0); }
+        if (msg.username === user?.username) {
+          setMySeat(null); setMyCards([]); setSessionBuyin(0);
+          // Aggiorna saldo nel contesto auth dopo il cashout
+          refreshUser();
+        }
         setTableState((prev) => {
           const seats = [...prev.seats];
           if (msg.seat != null) seats[msg.seat] = null;
@@ -437,6 +447,10 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
             min_buyin:   t.min_buyin   ?? t.buyin_min    ?? 100,
             max_buyin:   t.max_buyin   ?? t.buyin_max    ?? null,
           });
+        }
+        // Sincronizza il saldo dal server al contesto auth
+        if (msg.user?.chips_balance != null) {
+          updateBalance(msg.user.chips_balance);
         }
         if (msg.tournament) {
           const tr = msg.tournament;
@@ -495,6 +509,13 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
         if (onChatRef.current) onChatRef.current(msg);
         break;
 
+      // ── Rebuy completato ─────────────────────────────────────────────────
+      case 'rebuy_done':
+        // Aggiorna saldo profilo nel contesto auth
+        refreshUser();
+        pushLog(`${msg.username} ha ricaricato +${msg.amount?.toLocaleString('it-IT')} chips`);
+        break;
+
       // ── Errore dal server ─────────────────────────────────────────────────
       case 'error':
         console.warn('[PokerTable] Errore server:', msg.message);
@@ -509,7 +530,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
         break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, applyTableState, startCountdown, stopCountdown, pushLog, setErrorWithTTL]);
+  }, [user, applyTableState, startCountdown, stopCountdown, pushLog, setErrorWithTTL, updateBalance, refreshUser]);
 
   // ── Invio con coda offline ────────────────────────────────────────────────
 
@@ -634,6 +655,10 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
     () => _send({ type: 'leave_seat' }),
     [_send]
   );
+  const sendRebuy = useCallback(
+    (amount) => _send({ type: 'rebuy', amount }),
+    [_send]
+  );
 
   return {
     // Stato
@@ -665,6 +690,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
     sendChat,
     joinSeat,
     leaveSeat,
+    sendRebuy,
   };
 }
 

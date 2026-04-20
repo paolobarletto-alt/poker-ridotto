@@ -357,6 +357,66 @@ async def _get_user_from_token(token: str, db: AsyncSession) -> Optional[User]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# HELPER — costruisce il payload hand_end (con info split)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_hand_end_payload(game, table_id: str) -> dict:
+    """
+    Costruisce il dizionario da inviare come messaggio 'hand_end'.
+    Gestisce sia il vincitore singolo che il pareggio (split pot).
+    """
+    vincite = game.vincite_mano
+    seat_map = game_manager._seat_map.get(table_id, {})
+    pid_to_seat = {pid: sn for pid, sn in seat_map.items()}
+
+    seat_results: dict[int, int] = {}
+    for pid in game.ordine:
+        sn = pid_to_seat.get(pid)
+        if sn is None:
+            continue
+        puntata = game.seats[pid].puntata_totale_mano
+        vincita = vincite.get(pid, 0)
+        seat_results[sn] = vincita - puntata
+
+    # Vincitore principale (o primo in caso di pareggio)
+    winner_name = None
+    winner_seat = None
+    winner_net = 0
+    if vincite:
+        main_pid = max(vincite, key=lambda p: vincite[p])
+        winner_name = game.seats[main_pid].nome
+        winner_seat = pid_to_seat.get(main_pid)
+        winner_net = seat_results.get(winner_seat, vincite[main_pid])
+
+    # Pareggio: più giocatori con la stessa vincita massima
+    is_split = len(vincite) > 1
+    split_winners = [
+        {
+            "name": game.seats[pid].nome,
+            "seat": pid_to_seat.get(pid),
+            "amount": amt,
+        }
+        for pid, amt in vincite.items()
+    ] if is_split else []
+
+    return {
+        "type": "hand_end",
+        "pot": sum(vincite.values()),
+        "winner_name": winner_name,
+        "winner_seat": winner_seat,
+        "winner_net": winner_net,
+        "seat_results": seat_results,
+        "winners": [
+            {"player_id": pid, "amount": amt}
+            for pid, amt in vincite.items()
+        ],
+        "is_split": is_split,
+        "split_winners": split_winners,
+        "log": game.log[-10:],
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # HELPER — persistenza fine mano
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -792,35 +852,7 @@ async def _handle_leave_seat(
 
     # Se il fold ha concluso la mano, trasmetti hand_end e persisti
     if hand_was_in_progress and game.fase == FaseGioco.FINE_MANO and game.num_mano == hand_num_before:
-        vincite = game.vincite_mano
-        seat_map = game_manager._seat_map.get(table_id, {})
-        pid_to_seat = {pid: sn for pid, sn in seat_map.items()}
-        seat_results: dict[int, int] = {}
-        for pid in game.ordine:
-            sn = pid_to_seat.get(pid)
-            if sn is None:
-                continue
-            puntata = game.seats[pid].puntata_totale_mano
-            vincita = vincite.get(pid, 0)
-            seat_results[sn] = vincita - puntata
-        winner_name = None
-        winner_seat = None
-        winner_net = 0
-        if vincite:
-            main_pid = max(vincite, key=lambda p: vincite[p])
-            winner_name = game.seats[main_pid].nome
-            winner_seat = pid_to_seat.get(main_pid)
-            winner_net = seat_results.get(winner_seat, vincite[main_pid])
-        await game_manager.broadcast(table_id, {
-            "type": "hand_end",
-            "pot": sum(vincite.values()),
-            "winner_name": winner_name,
-            "winner_seat": winner_seat,
-            "winner_net": winner_net,
-            "seat_results": seat_results,
-            "winners": [{"player_id": pid, "amount": amt} for pid, amt in vincite.items()],
-            "log": game.log[-10:],
-        })
+        await game_manager.broadcast(table_id, _build_hand_end_payload(game, table_id))
         async with AsyncSessionLocal() as db:
             tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
             db_table_fresh = tbl_res.scalar_one_or_none()
@@ -1003,39 +1035,7 @@ async def _post_action_advance(
         vincite = game.vincite_mano
         await game_manager.broadcast_state(table_id)
 
-        seat_map = game_manager._seat_map.get(table_id, {})
-        pid_to_seat = {pid: sn for pid, sn in seat_map.items()}
-        seat_results: dict[int, int] = {}
-        for pid in game.ordine:
-            seat = pid_to_seat.get(pid)
-            if seat is None:
-                continue
-            puntata = game.seats[pid].puntata_totale_mano
-            vincita = vincite.get(pid, 0)
-            seat_results[seat] = vincita - puntata
-
-        winner_name = None
-        winner_seat = None
-        winner_net = 0
-        if vincite:
-            main_pid = max(vincite, key=lambda p: vincite[p])
-            winner_name = game.seats[main_pid].nome
-            winner_seat = pid_to_seat.get(main_pid)
-            winner_net = seat_results.get(winner_seat, vincite[main_pid])
-
-        await game_manager.broadcast(table_id, {
-            "type": "hand_end",
-            "pot": sum(vincite.values()),
-            "winner_name": winner_name,
-            "winner_seat": winner_seat,
-            "winner_net": winner_net,
-            "seat_results": seat_results,
-            "winners": [
-                {"player_id": pid, "amount": amt}
-                for pid, amt in vincite.items()
-            ],
-            "log": game.log[-10:],
-        })
+        await game_manager.broadcast(table_id, _build_hand_end_payload(game, table_id))
 
         async with AsyncSessionLocal() as db:
             tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
@@ -1123,37 +1123,7 @@ async def _run_out_cards(table_id: str, db_table: Any, num_mano: int) -> None:
     if game is None or game.num_mano != num_mano:
         return
 
-    vincite = game.vincite_mano
-    seat_map = game_manager._seat_map.get(table_id, {})
-    pid_to_seat = {pid: sn for pid, sn in seat_map.items()}
-    seat_results: dict[int, int] = {}
-    for pid in game.ordine:
-        seat = pid_to_seat.get(pid)
-        if seat is None:
-            continue
-        puntata = game.seats[pid].puntata_totale_mano
-        vincita = vincite.get(pid, 0)
-        seat_results[seat] = vincita - puntata
-
-    winner_name = None
-    winner_seat = None
-    winner_net = 0
-    if vincite:
-        main_pid = max(vincite, key=lambda p: vincite[p])
-        winner_name = game.seats[main_pid].nome
-        winner_seat = pid_to_seat.get(main_pid)
-        winner_net = seat_results.get(winner_seat, vincite[main_pid])
-
-    await game_manager.broadcast(table_id, {
-        "type": "hand_end",
-        "pot": sum(vincite.values()),
-        "winner_name": winner_name,
-        "winner_seat": winner_seat,
-        "winner_net": winner_net,
-        "seat_results": seat_results,
-        "winners": [{"player_id": pid, "amount": amt} for pid, amt in vincite.items()],
-        "log": game.log[-10:],
-    })
+    await game_manager.broadcast(table_id, _build_hand_end_payload(game, table_id))
 
     if db_table is None:
         async with AsyncSessionLocal() as db:
