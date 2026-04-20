@@ -884,7 +884,7 @@ async def _handle_action(
         # Riavvia dopo 3s se ci sono abbastanza giocatori
         active = game.players_active_count()
         if active >= db_table.min_players:
-            asyncio.create_task(_delayed_start_hand(table_id, db_table, game, delay=3))
+            asyncio.create_task(_delayed_start_hand(table_id, db_table, game, delay=3, show_countdown=False))
         else:
             await game_manager.broadcast(table_id, {
                 "type": "waiting_players",
@@ -917,12 +917,14 @@ async def _delayed_start_hand(
     db_table: PokerTable,
     game: Any,
     delay: float = 3.0,
+    show_countdown: bool = True,
 ):
     """Attende delay secondi poi avvia una nuova mano se le condizioni sono soddisfatte."""
-    await game_manager.broadcast(table_id, {
-        "type": "game_starting",
-        "countdown": int(delay),
-    })
+    if show_countdown:
+        await game_manager.broadcast(table_id, {
+            "type": "game_starting",
+            "countdown": int(delay),
+        })
     await asyncio.sleep(delay)
 
     if game.hand_in_progress():

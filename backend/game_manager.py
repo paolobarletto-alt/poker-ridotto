@@ -211,16 +211,13 @@ class GameManager:
         )
 
         async def _timer():
-            # Notifica il tempo rimasto al client
-            await self.send_to(table_id, player_id, {
-                "type": "action_timer",
-                "seconds": seconds,
-                "player_id": player_id,
-            })
+            seat_number = self._seat_map.get(table_id, {}).get(player_id)
+            # Notifica a tutti (incluso seat per la barra timer)
             await self.broadcast(table_id, {
                 "type": "action_timer",
                 "seconds": seconds,
                 "player_id": player_id,
+                "seat": seat_number,
             })
             await asyncio.sleep(seconds)
 

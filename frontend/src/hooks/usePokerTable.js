@@ -215,6 +215,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
         setMyCards([]);
         setShowdownResults(null);
         setHandEndResult(null);
+        setGameStartingIn(null); // chiudi countdown se ancora visibile
         clearTimeout(showdownClearRef.current);
         clearTimeout(handEndClearRef.current);
         setHandLog([]);
