@@ -40,6 +40,13 @@ logger = logging.getLogger("ridotto.ws_router")
 router = APIRouter()
 
 
+def _enrich_state(public: dict, seat_map: dict) -> dict:
+    """Aggiunge seat number a ogni giocatore nello stato pubblico."""
+    for g in public.get("giocatori", []):
+        if g.get("seat") is None:
+            g["seat"] = seat_map.get(g["player_id"])
+    return public
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SCHEMI PYDANTIC
 # ─────────────────────────────────────────────────────────────────────────────
@@ -508,7 +515,7 @@ async def websocket_table(
             "min_buyin": db_table.min_buyin,
             "max_buyin": db_table.max_buyin,
         },
-        "state": game.get_stato_pubblico(),
+        "state": _enrich_state(game.get_stato_pubblico(), game_manager._seat_map.get(table_id, {})),
         "user": {
             "id": user_id,
             "username": current_user.username,

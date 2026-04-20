@@ -178,6 +178,11 @@ class GameManager:
 
         public = game.get_stato_pubblico()
 
+        # Arricchisce ogni giocatore con il suo seat number (da _seat_map)
+        seat_map = self._seat_map.get(table_id, {})
+        for g in public.get("giocatori", []):
+            g["seat"] = seat_map.get(g["player_id"])
+
         # Stato pubblico a tutti
         await self.broadcast(table_id, {"type": "state", "state": public})
 
