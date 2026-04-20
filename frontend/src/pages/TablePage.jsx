@@ -4,11 +4,79 @@
  * Route: /table/:id
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { usePokerTable } from '../hooks/usePokerTable';
 import { useTableChat } from '../hooks/useTableChat';
 import PokerTable from '../components/Table';
+import { GoldButton } from '../components/Shell';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overlay conferma abbandono + riepilogo sessione
+// ─────────────────────────────────────────────────────────────────────────────
+
+function LeaveOverlay({ step, pnl, onConfirm, onCancel, onGoLobby }) {
+  const isPositive = pnl > 0;
+  const isNeutral  = pnl === 0;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1300,
+      background: 'rgba(5,10,7,0.88)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backdropFilter: 'blur(10px)',
+    }}>
+      <div style={{
+        background: 'rgba(12,18,14,0.97)',
+        border: '1px solid rgba(212,175,55,0.35)',
+        padding: '40px 48px',
+        minWidth: 340, maxWidth: 420,
+        textAlign: 'center',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
+      }}>
+        {step === 'confirm' ? (
+          <>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#F5F1E8', fontStyle: 'italic', marginBottom: 10 }}>
+              Abbandonare il tavolo?
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.5)', letterSpacing: '0.06em', marginBottom: 32, lineHeight: 1.6 }}>
+              Se hai chips in gioco in una mano in corso,<br />
+              quelle rimarranno nel piatto.
+            </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <GoldButton onClick={onCancel} variant="ghost" size="md">Annulla</GoldButton>
+              <GoldButton onClick={onConfirm} size="md">Abbandona</GoldButton>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#F5F1E8', fontStyle: 'italic', marginBottom: 24 }}>
+              Sessione terminata
+            </div>
+            <div style={{
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 38,
+              fontWeight: 700,
+              color: isNeutral ? '#D4AF37' : isPositive ? '#4caf50' : '#e57373',
+              marginBottom: 8,
+              letterSpacing: '-0.02em',
+            }}>
+              {isNeutral ? '±' : isPositive ? '+' : ''}{pnl.toLocaleString('it-IT')}
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.45)', letterSpacing: '0.1em', marginBottom: 36 }}>
+              {isNeutral
+                ? 'NESSUNA VARIAZIONE'
+                : isPositive
+                  ? 'GUADAGNATO IN QUESTA SESSIONE'
+                  : 'PERSO IN QUESTA SESSIONE'}
+            </div>
+            <GoldButton onClick={onGoLobby} size="md">Torna alla Lobby</GoldButton>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -19,6 +87,10 @@ export default function TablePage() {
   // Bridge ref: usePokerTable dispatches chat events → useTableChat receives them
   const chatCallbackRef = useRef(null);
   const onChatMessage   = useCallback((msg) => chatCallbackRef.current?.(msg), []);
+
+  // Leave flow state
+  const [leaveStep, setLeaveStep] = useState(null); // null | 'confirm' | 'summary'
+  const [sessionPnl, setSessionPnl] = useState(0);
 
   const {
     tableState,
@@ -36,6 +108,7 @@ export default function TablePage() {
     handWinner,
     seatDeltas,
     timerTrigger,
+    sessionBuyin,
     sendAction,
     sendChat,
     joinSeat,
@@ -50,10 +123,24 @@ export default function TablePage() {
 
   const { messages, sendMessage } = useTableChat(sendChat, chatCallbackRef);
 
-  const handleLeave = useCallback(() => {
+  // Calcola P&L e mostra conferma
+  const handleLeaveRequest = useCallback(() => {
+    setLeaveStep('confirm');
+  }, []);
+
+  // Utente conferma abbandono
+  const handleLeaveConfirm = useCallback(() => {
+    const seats = tableState?.seats ?? [];
+    const myStack = mySeat !== null ? (seats[mySeat]?.stack ?? 0) : 0;
+    const pnl = myStack - sessionBuyin;
+    setSessionPnl(pnl);
     leaveSeat();
+    setLeaveStep('summary');
+  }, [tableState, mySeat, sessionBuyin, leaveSeat]);
+
+  const handleGoLobby = useCallback(() => {
     navigate('/lobby');
-  }, [leaveSeat, navigate]);
+  }, [navigate]);
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
@@ -111,6 +198,17 @@ export default function TablePage() {
         </div>
       )}
 
+      {/* ── Overlay abbandono ────────────────────────────────────────────── */}
+      {leaveStep && (
+        <LeaveOverlay
+          step={leaveStep}
+          pnl={sessionPnl}
+          onConfirm={handleLeaveConfirm}
+          onCancel={() => setLeaveStep(null)}
+          onGoLobby={handleGoLobby}
+        />
+      )}
+
       {/* ── Tavolo ───────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, minHeight: 0 }}>
         <PokerTable
@@ -134,7 +232,7 @@ export default function TablePage() {
           sendMessage={sendMessage}
           joinSeat={joinSeat}
           leaveSeat={leaveSeat}
-          onLeave={handleLeave}
+          onLeave={handleLeaveRequest}
           cardBack="ridotto"
           isTournament={isTournament}
           tournament={tournament}

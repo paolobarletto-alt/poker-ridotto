@@ -78,6 +78,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
   const [handWinner,        setHandWinner]        = useState(null); // {name, seat, amount}
   const [seatDeltas,        setSeatDeltas]        = useState({});   // {seat: delta}
   const [timerTrigger,      setTimerTrigger]      = useState(0);    // incrementa ad ogni action_timer
+  const [sessionBuyin,      setSessionBuyin]      = useState(0);    // buy-in iniziale della sessione
 
   // ── Stato torneo ──────────────────────────────────────────────────────────
   const [isTournament,      setIsTournament]      = useState(false);
@@ -370,7 +371,11 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
 
       // ── Giocatore si siede ──────────────────────────────────────────────
       case 'player_joined':
-        if (msg.username === user?.username) setMySeat(msg.seat);
+        if (msg.username === user?.username) {
+          setMySeat(msg.seat);
+          // Registra il buy-in iniziale della sessione
+          setSessionBuyin((prev) => prev === 0 ? (msg.stack ?? 0) : prev);
+        }
         setTableState((prev) => {
           const seats = [...prev.seats];
           seats[msg.seat] = {
@@ -394,7 +399,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
 
       // ── Giocatore lascia ────────────────────────────────────────────────
       case 'player_left':
-        if (msg.username === user?.username) { setMySeat(null); setMyCards([]); }
+        if (msg.username === user?.username) { setMySeat(null); setMyCards([]); setSessionBuyin(0); }
         setTableState((prev) => {
           const seats = [...prev.seats];
           if (msg.seat != null) seats[msg.seat] = null;
@@ -647,6 +652,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
     handWinner,
     seatDeltas,
     timerTrigger,
+    sessionBuyin,
     // Torneo
     isTournament,
     tournament,
