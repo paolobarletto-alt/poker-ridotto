@@ -562,6 +562,10 @@ async def websocket_table(
                             "ts": datetime.now(timezone.utc).isoformat(),
                         })
 
+                # ── rebuy ────────────────────────────────────────────────
+                elif msg_type == "rebuy":
+                    await _handle_rebuy(websocket, db_table, game, current_user, msg, table_id)
+
                 # ── ping ─────────────────────────────────────────────────
                 elif msg_type == "ping":
                     await websocket.send_json({"type": "pong"})
@@ -587,12 +591,10 @@ async def websocket_table(
         # ── Pulizia disconnessione ─────────────────────────────────────────
         game_manager.remove_connection(table_id, user_id)
 
-        # Se il giocatore era seduto, mettilo in sitting_out
+        # Disconnessione: il giocatore resta seduto nell'engine (timer gestirà
+        # i suoi turni con auto check/fold). Sit-out solo se stack == 0.
         if game_manager.is_seated(table_id, user_id):
-            game.sit_out_player(user_id)
-            await game_manager.broadcast_state(table_id)
-
-            # Aggiorna stato nel DB
+            # Aggiorna solo lo stato DB a "away" senza toccare l'engine
             async with AsyncSessionLocal() as db:
                 seat_res = await db.execute(
                     select(TableSeat).where(
@@ -605,13 +607,7 @@ async def websocket_table(
                     db_seat.status = "away"
                     await db.commit()
 
-            # Controlla se la mano è in pausa per mancanza di giocatori
-            active = game.players_active_count()
-            if active < db_table.min_players and not game.hand_in_progress():
-                await game_manager.broadcast(table_id, {
-                    "type": "waiting_players",
-                    "needed": db_table.min_players - active,
-                })
+            await game_manager.broadcast_state(table_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -806,6 +802,83 @@ async def _handle_leave_seat(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# HANDLER rebuy
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _handle_rebuy(
+    ws: WebSocket,
+    db_table: PokerTable,
+    game: Any,
+    user: User,
+    msg: dict,
+    table_id: str,
+):
+    user_id = str(user.id)
+    if not game_manager.is_seated(table_id, user_id):
+        await ws.send_json({"type": "error", "message": "Non sei seduto a questo tavolo"})
+        return
+
+    amount = int(msg.get("amount", 0))
+    if amount <= 0:
+        await ws.send_json({"type": "error", "message": "Importo ricarica non valido"})
+        return
+
+    async with AsyncSessionLocal() as db:
+        user_res = await db.execute(select(User).where(User.id == user.id))
+        user_db = user_res.scalar_one()
+        if user_db.chips_balance < amount:
+            await ws.send_json({"type": "error", "message": "Saldo profilo insufficiente"})
+            return
+
+        seat_res = await db.execute(
+            select(TableSeat).where(
+                TableSeat.table_id == db_table.id,
+                TableSeat.user_id == user.id,
+            )
+        )
+        db_seat = seat_res.scalar_one_or_none()
+        if not db_seat:
+            await ws.send_json({"type": "error", "message": "Posto non trovato"})
+            return
+
+        # Verifica limite max_buyin
+        current_stack = db_seat.stack
+        max_buyin = db_table.max_buyin
+        if max_buyin and (current_stack + amount) > max_buyin:
+            amount = max_buyin - current_stack
+            if amount <= 0:
+                await ws.send_json({"type": "error", "message": "Hai già raggiunto il massimo al tavolo"})
+                return
+
+        # Aggiorna DB
+        user_db.chips_balance -= amount
+        db_seat.stack += amount
+        db.add(ChipsLedger(
+            user_id=user.id,
+            amount=-amount,
+            balance_after=user_db.chips_balance,
+            reason="table_buyin",
+            description=f"Ricarica al tavolo '{db_table.name}'",
+        ))
+        await db.commit()
+
+    # Aggiorna stack nell'engine
+    engine_seat = game.seats.get(user_id)
+    if engine_seat:
+        engine_seat.stack += amount
+
+    # Notifica tutti del rebuy
+    await game_manager.broadcast(table_id, {
+        "type": "rebuy_done",
+        "seat": game_manager.seat_for_user(table_id, user_id),
+        "username": user.username,
+        "amount": amount,
+        "new_stack": engine_seat.stack if engine_seat else db_seat.stack + amount,
+    })
+    await game_manager.broadcast_state(table_id)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # HANDLER action
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -949,12 +1022,124 @@ async def _post_action_advance(
             "phase": game.fase.value,
             "board": [str(c) for c in game.board],
         })
+        # All-in runout: nessun turno attivo → rivela le carte rimanenti una street alla volta
+        if game.turno_attivo is None and game.fase not in (FaseGioco.FINE_MANO, FaseGioco.IN_ATTESA):
+            asyncio.create_task(_run_out_cards(table_id, db_table, game.num_mano))
+            return
     else:
         await game_manager.broadcast_state(table_id)
 
     # ── Avvia timer per il prossimo giocatore ─────────────────────────────
     if game.hand_in_progress() and game.turno_attivo:
         await game_manager.start_action_timer(table_id, game.turno_attivo)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HELPER — all-in runout: rivela carte community una street alla volta
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _run_out_cards(table_id: str, db_table: Any, num_mano: int) -> None:
+    """
+    Quando tutti i giocatori sono all-in, rivela le carte community
+    una street alla volta con un delay tra l'una e l'altra:
+    - FLOP (3 carte) già mostrato: aspetta 2s → gira TURN
+    - TURN: aspetta 1.5s → gira RIVER
+    - RIVER: aspetta 1.5s → showdown + fine mano
+    """
+    while True:
+        game = game_manager.get_table(table_id)
+        if game is None or game.num_mano != num_mano:
+            return
+
+        if game.fase == FaseGioco.FINE_MANO:
+            break
+
+        # Delay in base a quante carte sono appena state mostrate
+        delay = 2.0 if game.fase == FaseGioco.FLOP else 1.5
+        await asyncio.sleep(delay)
+
+        game = game_manager.get_table(table_id)
+        if game is None or game.num_mano != num_mano:
+            return
+
+        fase_before = game.fase
+        game._avanza_fase()
+
+        await game_manager.broadcast_state(table_id)
+
+        if game.fase != fase_before and game.fase != FaseGioco.FINE_MANO:
+            await game_manager.broadcast(table_id, {
+                "type": "new_street",
+                "phase": game.fase.value,
+                "board": [str(c) for c in game.board],
+            })
+
+        if game.fase == FaseGioco.FINE_MANO:
+            break
+
+    # ── Fine mano dopo runout ──────────────────────────────────────────────
+    game = game_manager.get_table(table_id)
+    if game is None or game.num_mano != num_mano:
+        return
+
+    vincite = game.vincite_mano
+    seat_map = game_manager._seat_map.get(table_id, {})
+    pid_to_seat = {pid: sn for pid, sn in seat_map.items()}
+    seat_results: dict[int, int] = {}
+    for pid in game.ordine:
+        seat = pid_to_seat.get(pid)
+        if seat is None:
+            continue
+        puntata = game.seats[pid].puntata_totale_mano
+        vincita = vincite.get(pid, 0)
+        seat_results[seat] = vincita - puntata
+
+    winner_name = None
+    winner_seat = None
+    winner_net = 0
+    if vincite:
+        main_pid = max(vincite, key=lambda p: vincite[p])
+        winner_name = game.seats[main_pid].nome
+        winner_seat = pid_to_seat.get(main_pid)
+        winner_net = seat_results.get(winner_seat, vincite[main_pid])
+
+    await game_manager.broadcast(table_id, {
+        "type": "hand_end",
+        "pot": sum(vincite.values()),
+        "winner_name": winner_name,
+        "winner_seat": winner_seat,
+        "winner_net": winner_net,
+        "seat_results": seat_results,
+        "winners": [{"player_id": pid, "amount": amt} for pid, amt in vincite.items()],
+        "log": game.log[-10:],
+    })
+
+    if db_table is None:
+        async with AsyncSessionLocal() as db:
+            tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == uuid.UUID(table_id)))
+            db_table = tbl_res.scalar_one_or_none()
+        if db_table is None:
+            return
+
+    async with AsyncSessionLocal() as db:
+        tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
+        db_table_fresh = tbl_res.scalar_one()
+        await _persist_hand_end(db, db_table_fresh, game, game.num_mano)
+        await handle_sitgo_hand_end(table_id, db)
+
+    await _handle_busted_players(table_id, game, db_table.id)
+
+    active = game.players_active_count()
+    async with AsyncSessionLocal() as db:
+        tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
+        db_table_latest = tbl_res.scalar_one_or_none()
+    if db_table_latest and active >= db_table_latest.min_players:
+        asyncio.create_task(_delayed_start_hand(table_id, db_table_latest, game, delay=3, show_countdown=False))
+    else:
+        await game_manager.broadcast(table_id, {
+            "type": "waiting_players",
+            "needed": (db_table_latest.min_players if db_table_latest else 2) - active,
+        })
 
 
 # ─────────────────────────────────────────────────────────────────────────────

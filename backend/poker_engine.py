@@ -824,15 +824,8 @@ class GiocoPoker:
         # Primo a parlare nei giri post-flop: il primo giocatore attivo a sinistra del dealer
         can_act = self._giocatori_che_possono_agire()
         if len(can_act) == 0:
-            # Tutti all-in: continua a distribuire carte senza azioni
-            all_in_players = [
-                pid for pid in self.ordine
-                if self.seats[pid].stato == StatoSeat.ALL_IN
-            ]
-            if self.fase == FaseGioco.RIVER:
-                self._showdown()
-            else:
-                self._avanza_fase()
+            # Tutti all-in: non ricorrere — ws_router rivela le carte una street alla volta con delay
+            self.turno_attivo = None
             return
 
         # Trova primo attivo dopo il dealer
