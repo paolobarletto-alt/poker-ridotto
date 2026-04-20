@@ -859,12 +859,36 @@ async def _handle_action(
             await game_manager.start_action_timer(table_id, game.turno_attivo)
         return
 
+    await _post_action_advance(table_id, fase_before, db_table=db_table)
+
+
+async def _post_action_advance(
+    table_id: str,
+    fase_before: Any,
+    db_table: Optional[PokerTable] = None,
+) -> None:
+    """
+    Gestisce tutto ciò che segue l'applicazione di un'azione (manuale o da timeout):
+    hand_end → persist + broadcast, new_street, avvio timer prossimo giocatore.
+    Usato sia da _handle_action che dal callback timer in game_manager.
+    """
+    game = game_manager.get_table(table_id)
+    if game is None:
+        return
+
+    # Carica db_table se non passato (caso timeout timer)
+    if db_table is None:
+        async with AsyncSessionLocal() as db:
+            tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == uuid.UUID(table_id)))
+            db_table = tbl_res.scalar_one_or_none()
+        if db_table is None:
+            return
+
     # ── Fine mano ─────────────────────────────────────────────────────────
     if game.fase == FaseGioco.FINE_MANO:
         vincite = game.vincite_mano
         await game_manager.broadcast_state(table_id)
 
-        # Calcola delta per seat e dati vincitore principale
         seat_map = game_manager._seat_map.get(table_id, {})
         pid_to_seat = {pid: sn for pid, sn in seat_map.items()}
         seat_results: dict[int, int] = {}
@@ -899,18 +923,14 @@ async def _handle_action(
             "log": game.log[-10:],
         })
 
-        # Persisti nel DB
         async with AsyncSessionLocal() as db:
             tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
             db_table_fresh = tbl_res.scalar_one()
             await _persist_hand_end(db, db_table_fresh, game, game.num_mano)
-            # Gestisci eliminazioni / fine torneo Sit&Go
             await handle_sitgo_hand_end(table_id, db)
 
-        # Giocatori a 0 chips → sit-out immediato
         await _handle_busted_players(table_id, game, db_table.id)
 
-        # Riavvia dopo 3s se ci sono abbastanza giocatori
         active = game.players_active_count()
         if active >= db_table.min_players:
             asyncio.create_task(_delayed_start_hand(table_id, db_table, game, delay=3, show_countdown=False))
@@ -1041,3 +1061,8 @@ async def _delayed_start_hand(
     # Avvia il timer per il primo giocatore di turno
     if game.turno_attivo:
         await game_manager.start_action_timer(table_id, game.turno_attivo)
+
+
+# ── Registra il callback post-azione per i timeout timer ─────────────────────
+# Fatto a fine modulo così _post_action_advance è già definita.
+game_manager.set_post_action_handler(_post_action_advance)

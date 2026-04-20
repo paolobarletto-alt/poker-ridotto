@@ -45,6 +45,10 @@ class GameManager:
         # contiene solo i giocatori effettivamente seduti
         self._seat_map: Dict[str, Dict[str, int]] = {}
 
+        # Callback opzionale: async (table_id, fase_before) → None
+        # Registrato da ws_router per gestire hand_end, new_street, ecc.
+        self._post_action_handler = None
+
     # ── Gestione tavoli ─────────────────────────────────────────────────────
 
     def get_or_create_table(
@@ -234,12 +238,20 @@ class GameManager:
                     break
 
             logger.info("Timer scaduto per %s al tavolo %s → %s", player_id, table_id, azione_auto.value)
-            game.applica_azione(player_id, azione_auto, 0)
-            await self.broadcast_state(table_id)
+            fase_before = game.fase
+            ok = game.applica_azione(player_id, azione_auto, 0)
+            if not ok:
+                logger.warning("Timer: applica_azione fallita per %s al tavolo %s", player_id, table_id)
+                return
 
-            # Avvia il prossimo timer se la mano è ancora in corso
-            if game.hand_in_progress() and game.turno_attivo:
-                await self.start_action_timer(table_id, game.turno_attivo)
+            # Delega al handler completo (ws_router) se registrato
+            if self._post_action_handler is not None:
+                await self._post_action_handler(table_id, fase_before)
+            else:
+                # Fallback minimale (nessun DB, nessuna persistenza)
+                await self.broadcast_state(table_id)
+                if game.hand_in_progress() and game.turno_attivo:
+                    await self.start_action_timer(table_id, game.turno_attivo)
 
         task = asyncio.create_task(_timer())
         self._action_timers[table_id] = task
@@ -249,6 +261,13 @@ class GameManager:
         if task and not task.done():
             task.cancel()
             logger.debug("Timer annullato per tavolo %s", table_id)
+
+    def set_post_action_handler(self, handler):
+        """
+        Registra un handler async chiamato dopo ogni azione da timeout.
+        Firma: async (table_id: str, fase_before: FaseGioco) -> None
+        """
+        self._post_action_handler = handler
 
 
 # ── Singleton globale ────────────────────────────────────────────────────────
