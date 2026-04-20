@@ -336,8 +336,6 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           pushLog(`Piatto vinto: €${result.pot_won}`);
         break;
       }
-        break;
-      }
 
       // ── Attesa giocatori ────────────────────────────────────────────────
       case 'waiting_players':
@@ -399,6 +397,19 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           return { ...prev, seats };
         });
         pushLog(`${msg.username} lascia il tavolo`);
+        break;
+
+      // ── Giocatore sit-out (es. a 0 chips) ────────────────────────────────
+      case 'player_sit_out':
+        setTableState((prev) => {
+          const seats = [...prev.seats];
+          const idx = msg.seat;
+          if (idx != null && seats[idx]) {
+            seats[idx] = { ...seats[idx], status: 'sit_out' };
+          }
+          return { ...prev, seats };
+        });
+        pushLog(`${msg.username ?? `Posto ${msg.seat + 1}`} è in sit-out${msg.reason === 'busted' ? ' (chips esaurite)' : ''}`);
         break;
 
       // ── Welcome (primo messaggio alla connessione) ───────────────────────

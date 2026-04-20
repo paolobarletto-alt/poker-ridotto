@@ -379,9 +379,12 @@ class GiocoPoker:
         """Aggiunge un giocatore al tavolo. Restituisce True se riuscito."""
         if player_id in self.seats:
             return False
-        if self.fase != FaseGioco.IN_ATTESA:
+        # Permetti di unirsi anche tra una mano e l'altra (FINE_MANO)
+        if self.fase not in (FaseGioco.IN_ATTESA, FaseGioco.FINE_MANO):
             return False
-        self.seats[player_id] = Seat(player_id=player_id, nome=nome, stack=stack)
+        # Tra mani il giocatore attende la prossima (sit-out fino a inizia_mano)
+        stato_iniziale = StatoSeat.SEDUTO_OUT if self.fase == FaseGioco.FINE_MANO else StatoSeat.ATTIVO
+        self.seats[player_id] = Seat(player_id=player_id, nome=nome, stack=stack, stato=stato_iniziale)
         self.ordine.append(player_id)
         return True
 

@@ -32,7 +32,7 @@ from config import settings
 from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
 from models import ChipsLedger, GameHand, HandAction, PokerTable, TableSeat, User
-from poker_engine import AzioneGioco, FaseGioco
+from poker_engine import AzioneGioco, FaseGioco, StatoSeat
 from routers.sitgo_router import handle_sitgo_hand_end
 
 logger = logging.getLogger("ridotto.ws_router")
@@ -907,6 +907,9 @@ async def _handle_action(
             # Gestisci eliminazioni / fine torneo Sit&Go
             await handle_sitgo_hand_end(table_id, db)
 
+        # Giocatori a 0 chips → sit-out immediato
+        await _handle_busted_players(table_id, game, db_table.id)
+
         # Riavvia dopo 3s se ci sono abbastanza giocatori
         active = game.players_active_count()
         if active >= db_table.min_players:
@@ -938,7 +941,47 @@ async def _handle_action(
 # HELPER — avvio mano ritardato
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _delayed_start_hand(
+async def _handle_busted_players(table_id: str, game: Any, db_table_id) -> None:
+    """
+    Dopo fine mano: mette in SEDUTO_OUT i giocatori con stack == 0
+    e notifica tutti i connessi.
+    """
+    seat_map = game_manager._seat_map.get(table_id, {})
+    pid_to_seat = {pid: sn for pid, sn in seat_map.items()}
+    busted = []
+    for pid, s in game.seats.items():
+        if s.stack == 0 and s.stato != StatoSeat.SEDUTO_OUT:
+            s.stato = StatoSeat.SEDUTO_OUT
+            busted.append((pid, s.nome, pid_to_seat.get(pid)))
+
+    if not busted:
+        return
+
+    # Aggiorna DB + broadcast
+    async with AsyncSessionLocal() as db:
+        for pid, nome, seat_num in busted:
+            seat_res = await db.execute(
+                select(TableSeat).where(
+                    TableSeat.table_id == db_table_id,
+                    TableSeat.user_id == uuid.UUID(pid),
+                )
+            )
+            db_seat = seat_res.scalar_one_or_none()
+            if db_seat:
+                db_seat.status = "sit_out"
+        await db.commit()
+
+    for pid, nome, seat_num in busted:
+        await game_manager.broadcast(table_id, {
+            "type": "player_sit_out",
+            "seat": seat_num,
+            "username": nome,
+            "reason": "busted",
+        })
+        logger.info("Giocatore %s (posto %s) a 0 chips → sit-out", nome, seat_num)
+
+
+
     table_id: str,
     db_table: PokerTable,
     game: Any,
