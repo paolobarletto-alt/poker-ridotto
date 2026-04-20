@@ -75,6 +75,8 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
   const [waitingForPlayers, setWaitingForPlayers] = useState(null);
   const [lastError,         setLastError]         = useState(null);
   const [handLog,           setHandLog]           = useState([]);
+  const [handWinner,        setHandWinner]        = useState(null); // {name, seat, amount}
+  const [seatDeltas,        setSeatDeltas]        = useState({});   // {seat: delta}
 
   // ── Stato torneo ──────────────────────────────────────────────────────────
   const [isTournament,      setIsTournament]      = useState(false);
@@ -99,6 +101,8 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
   const handEndClearRef    = useRef(null);
   const errorClearRef      = useRef(null);
   const eliminatedClearRef = useRef(null);
+  const handWinnerClearRef = useRef(null);
+  const seatDeltasClearRef = useRef(null);
 
   useEffect(() => { onChatRef.current = onChatMessage; }, [onChatMessage]);
 
@@ -312,10 +316,26 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           () => setHandEndResult(null), HAND_END_TTL
         );
 
+        // Vincitore principale — toast per tutti
+        if (msg.winner_name) {
+          clearTimeout(handWinnerClearRef.current);
+          setHandWinner({ name: msg.winner_name, seat: msg.winner_seat ?? null, amount: msg.winner_net ?? 0 });
+          handWinnerClearRef.current = setTimeout(() => setHandWinner(null), 3000);
+        }
+
+        // Delta per seat — flash +/- su ogni posto
+        if (msg.seat_results && Object.keys(msg.seat_results).length > 0) {
+          clearTimeout(seatDeltasClearRef.current);
+          setSeatDeltas(msg.seat_results);
+          seatDeltasClearRef.current = setTimeout(() => setSeatDeltas({}), 3000);
+        }
+
         if (result.hand_description)
           pushLog(`Mano vinta: ${result.hand_description} — €${result.pot_won}`);
         else if (result.pot_won)
           pushLog(`Piatto vinto: €${result.pot_won}`);
+        break;
+      }
         break;
       }
 
@@ -609,6 +629,8 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
     lastError,
     handLog,
     gameStartingIn,
+    handWinner,
+    seatDeltas,
     // Torneo
     isTournament,
     tournament,

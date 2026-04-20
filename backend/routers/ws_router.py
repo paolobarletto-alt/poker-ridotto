@@ -863,14 +863,40 @@ async def _handle_action(
     if game.fase == FaseGioco.FINE_MANO:
         vincite = game.vincite_mano
         await game_manager.broadcast_state(table_id)
+
+        # Calcola delta per seat e dati vincitore principale
+        seat_map = game_manager._seat_map.get(table_id, {})
+        pid_to_seat = {pid: sn for pid, sn in seat_map.items()}
+        seat_results: dict[int, int] = {}
+        for pid in game.ordine:
+            seat = pid_to_seat.get(pid)
+            if seat is None:
+                continue
+            puntata = game.seats[pid].puntata_totale_mano
+            vincita = vincite.get(pid, 0)
+            seat_results[seat] = vincita - puntata
+
+        winner_name = None
+        winner_seat = None
+        winner_net = 0
+        if vincite:
+            main_pid = max(vincite, key=lambda p: vincite[p])
+            winner_name = game.seats[main_pid].nome
+            winner_seat = pid_to_seat.get(main_pid)
+            winner_net = seat_results.get(winner_seat, vincite[main_pid])
+
         await game_manager.broadcast(table_id, {
             "type": "hand_end",
             "pot": sum(vincite.values()),
+            "winner_name": winner_name,
+            "winner_seat": winner_seat,
+            "winner_net": winner_net,
+            "seat_results": seat_results,
             "winners": [
                 {"player_id": pid, "amount": amt}
                 for pid, amt in vincite.items()
             ],
-            "log": game.log[-10:],  # ultime 10 righe del log
+            "log": game.log[-10:],
         })
 
         # Persisti nel DB

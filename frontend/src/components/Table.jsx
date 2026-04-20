@@ -406,36 +406,41 @@ function ChipStack({ amount }) {
 function ActionTimerBar({ timerSeconds, actingKey }) {
   const barRef = useRef(null);
 
-  // Re-esegue ogni volta che il turno passa a un nuovo giocatore
   useEffect(() => {
     const el = barRef.current;
     if (!el || !timerSeconds || timerSeconds <= 0) return;
 
+    // Reset
     el.style.transition = 'none';
     el.style.width = '100%';
+    el.style.background = '#D4AF37';
 
-    let raf1, raf2;
+    let raf1, raf2, redTimeout;
     raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
         el.style.transition = `width ${timerSeconds}s linear`;
         el.style.width = '0%';
+        // Cambia in rosso quando rimangono 8s
+        const msUntilRed = Math.max(0, (timerSeconds - 8) * 1000);
+        redTimeout = setTimeout(() => {
+          if (el) {
+            el.style.background = '#c0392b';
+          }
+        }, msUntilRed);
       });
     });
+
     return () => {
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
+      clearTimeout(redTimeout);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actingKey]);
 
-  const color = timerSeconds <= 8 ? '#c0392b' : '#D4AF37';
-
   return (
     <div style={{ height: 4, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
-      <div
-        ref={barRef}
-        style={{ height: '100%', width: '100%', background: color, transition: 'background 0.4s' }}
-      />
+      <div ref={barRef} style={{ height: '100%', width: '100%', background: '#D4AF37' }} />
     </div>
   );
 }
@@ -450,6 +455,7 @@ function Seat({
   isActing, timerSeconds, actingKey,
   phase, cardBack,
   showdownResult,
+  seatDelta,
   onEmptyClick,
 }) {
   const isWinner  = showdownResult?.won === true;
@@ -535,8 +541,17 @@ function Seat({
           </div>
 
           {/* Stack */}
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: isActing ? '#D4AF37' : 'rgba(245,241,232,0.7)' }}>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: isActing ? '#D4AF37' : 'rgba(245,241,232,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
             {seat.stack.toLocaleString('it-IT')}
+            {seatDelta != null && seatDelta !== 0 && (
+              <span style={{
+                fontSize: 10, fontWeight: 700,
+                color: seatDelta > 0 ? '#4caf50' : '#e57373',
+                animation: 'fadeInOut 3s forwards',
+              }}>
+                {seatDelta > 0 ? `+${seatDelta.toLocaleString('it-IT')}` : seatDelta.toLocaleString('it-IT')}
+              </span>
+            )}
           </div>
 
           {/* Descrizione mano (showdown) */}
@@ -597,6 +612,8 @@ export default function PokerTable({
   handEndResult     = null,
   waitingForPlayers = null,
   gameStartingIn    = null,
+  handWinner        = null,
+  seatDeltas        = {},
   lastError         = null,
   handLog           = [],
   messages          = [],
@@ -799,6 +816,7 @@ export default function PokerTable({
                 cardBack={cardBack}
                 showdownResult={showdownResults?.find((r) => r.seat === idx) ?? null}
                 onEmptyClick={() => handleSeatClick(idx)}
+                seatDelta={seatDeltas[idx] ?? null}
               />
             ))}
 
@@ -1023,6 +1041,32 @@ export default function PokerTable({
           onConfirm={(seat, amount) => { joinSeat?.(seat, amount); setShowBuyin(false); setSelectedSeat(null); }}
           onClose={() => { setShowBuyin(false); setSelectedSeat(null); }}
         />
+      )}
+
+      {/* ── Toast vincitore mano ─────────────────────────────────────────── */}
+      {handWinner && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 40,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            background: 'rgba(0,0,0,0.78)',
+            border: '1px solid rgba(212,175,55,0.45)',
+            borderRadius: 14,
+            padding: '22px 48px',
+            textAlign: 'center',
+            backdropFilter: 'blur(8px)',
+            animation: 'fadeInOut 3s forwards',
+          }}>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: '#D4AF37', fontWeight: 600 }}>
+              🏆 {handWinner.name} vince!
+            </div>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 16, color: '#F5F1E8', marginTop: 6 }}>
+              +{Math.abs(handWinner.amount).toLocaleString('it-IT')} chips
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Countdown inizio partita ─────────────────────────────────────── */}
