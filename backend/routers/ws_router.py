@@ -603,6 +603,13 @@ async def websocket_table(
         },
     })
 
+    # Invia subito anche un messaggio "state" separato: garantisce che il frontend
+    # veda i giocatori già seduti indipendentemente da come processa il welcome
+    await websocket.send_json({
+        "type": "state",
+        "state": _enrich_state(game.get_stato_pubblico(), game_manager._seat_map.get(table_id, {})),
+    })
+
     logger.info("WS connesso: user=%s tavolo=%s", current_user.username, table_id)
 
     # ── 5. Loop ricezione messaggi ─────────────────────────────────────────
