@@ -1057,7 +1057,7 @@ export default function PokerTable({
                     textTransform: 'uppercase', transition: 'color 0.15s',
                   }}
                 >
-                  {tab === 'mano' ? 'STORICO MANO' : 'CHAT'}
+                  {tab === 'mano' ? 'CRONOLOGIA' : 'CHAT'}
                   {unread && (
                     <span style={{ marginLeft: 5, background: '#D4AF37', color: '#0a0a0a', borderRadius: 8, padding: '1px 5px', fontSize: 7.5, fontWeight: 700 }}>
                       {messages.length > 9 ? '9+' : messages.length}

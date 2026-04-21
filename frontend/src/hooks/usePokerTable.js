@@ -112,7 +112,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
 
   const pushLog = useCallback((txt) => {
     const t = new Date().toLocaleTimeString('it-IT');
-    setHandLog((prev) => [{ t, txt }, ...prev].slice(0, 50));
+    setHandLog((prev) => [{ t, txt }, ...prev].slice(0, 200));
   }, []);
 
   const setErrorWithTTL = useCallback((msg) => {
@@ -224,7 +224,11 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
         setGameStartingIn(null); // chiudi countdown se ancora visibile
         clearTimeout(showdownClearRef.current);
         clearTimeout(handEndClearRef.current);
-        setHandLog([]);
+        setShowdownResults(null);
+        setHandEndResult(null);
+        setGameStartingIn(null);
+        clearTimeout(showdownClearRef.current);
+        clearTimeout(handEndClearRef.current);
         setTableState((prev) => ({
           ...prev,
           community:     [],
@@ -235,7 +239,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           timer_seconds: 0,
         }));
         stopCountdown();
-        pushLog(`Mano #${msg.hand_number ?? ''} iniziata`);
+        pushLog(`── Mano #${msg.hand_number ?? ''} ──`);
         break;
 
       // ── Nuova street ────────────────────────────────────────────────────
@@ -333,9 +337,9 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
         } else if (msg.winner_name) {
           setHandWinner({ is_split: false, name: msg.winner_name, seat: msg.winner_seat ?? null, amount: msg.winner_net ?? 0 });
           if (result.hand_description)
-            pushLog(`Mano vinta: ${result.hand_description} — €${result.pot_won}`);
+            pushLog(`🏆 ${msg.winner_name} vince con ${result.hand_description} — +${result.pot_won}`);
           else if (result.pot_won)
-            pushLog(`Piatto vinto: €${result.pot_won}`);
+            pushLog(`🏆 ${msg.winner_name} vince +${result.pot_won}`);
         }
         handWinnerClearRef.current = setTimeout(() => setHandWinner(null), 4000);
 
