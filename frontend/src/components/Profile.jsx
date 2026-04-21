@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { GoldButton } from './Shell';
-
 // ————— Skeleton —————
 const shimmerStyle = (() => {
   if (typeof document !== 'undefined' && !document.getElementById('profile-shimmer')) {
@@ -115,33 +113,6 @@ function StatTile({ label, value, sub, accent, wide, loading, tooltip }) {
   );
 }
 
-// ————— Refill info modal —————
-function RefillModal({ onClose }) {
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 200,
-    }} onClick={onClose}>
-      <div style={{
-        background: '#0e0e0e', border: '1px solid rgba(212,175,55,0.25)',
-        borderRadius: 2, padding: '32px 36px', maxWidth: 400, width: '90%',
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#F5F1E8', marginBottom: 14 }}>
-          Ricarica chips
-        </div>
-        <p style={{ fontSize: 14, color: 'rgba(245,241,232,0.75)', fontFamily: 'Inter, sans-serif', lineHeight: 1.6, marginBottom: 8 }}>
-          Le chips vengono ricaricate automaticamente ogni giorno.
-        </p>
-        <p style={{ fontSize: 14, color: 'rgba(245,241,232,0.75)', fontFamily: 'Inter, sans-serif', lineHeight: 1.6, marginBottom: 24 }}>
-          Se sei sotto <span style={{ color: '#D4AF37' }}>1.000 chips</span>, domani mattina tornerai a <span style={{ color: '#D4AF37' }}>10.000 chips</span>.
-        </p>
-        <GoldButton onClick={onClose} size="sm">Ho capito</GoldButton>
-      </div>
-    </div>
-  );
-}
-
 // ————— Profile —————
 export default function Profile() {
   const { user, refreshUser } = useAuth();
@@ -150,7 +121,6 @@ export default function Profile() {
   const [gameHistory, setGameHistory] = useState(null);
   const [chipsHistory, setChipsHistory] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showRefill, setShowRefill] = useState(false);
 
   useEffect(() => {
     // Aggiorna il saldo nel contesto auth al mount
@@ -204,7 +174,6 @@ export default function Profile() {
 
   return (
     <div style={{ paddingBottom: 40 }}>
-      {showRefill && <RefillModal onClose={() => setShowRefill(false)} />}
 
       {/* Header */}
       <div style={{
