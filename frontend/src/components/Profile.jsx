@@ -144,7 +144,7 @@ function RefillModal({ onClose }) {
 
 // ————— Profile —————
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const [statsData, setStatsData] = useState(null);
   const [gameHistory, setGameHistory] = useState(null);
@@ -153,6 +153,8 @@ export default function Profile() {
   const [showRefill, setShowRefill] = useState(false);
 
   useEffect(() => {
+    // Aggiorna il saldo nel contesto auth al mount
+    refreshUser();
     Promise.all([
       api.get('/users/me/stats'),
       api.get('/users/me/game-history'),
@@ -169,7 +171,7 @@ export default function Profile() {
         setChipsHistory([]);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshUser]);
 
   // Build cumulative P/L series from chips history
   const plData = (() => {
@@ -230,10 +232,6 @@ export default function Profile() {
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <GoldButton variant="ghost" size="sm">Impostazioni</GoldButton>
-          <GoldButton size="sm" onClick={() => setShowRefill(true)}>Deposita</GoldButton>
-        </div>
       </div>
 
       {/* Balance + chart */}
@@ -274,9 +272,8 @@ export default function Profile() {
             sub="mani vinte allo showdown"
             tooltip={statsData?.win_rate == null && !loading ? TOOLTIP_LOW : undefined}
             loading={loading} />
-          <StatTile label="VINCITE TOTALI"
+          <StatTile label="PIATTO PIÙ GROSSO VINTO"
             value={statsData?.biggest_pot != null ? `${fmt(statsData.biggest_pot)} chips` : '—'}
-            sub="piatto più grosso vinto"
             accent loading={loading} />
           <StatTile label="RISULTATO NETTO"
             value={netResult != null ? `${netResult >= 0 ? '+' : ''}${fmt(netResult)}` : '—'}
@@ -297,9 +294,9 @@ export default function Profile() {
             sub={statsData?.af != null ? (statsData.af < 1.5 ? 'passivo' : statsData.af < 3 ? 'bilanciato' : 'aggressivo') : undefined}
             tooltip={statsData?.af == null && !loading ? TOOLTIP_LOW : undefined}
             loading={loading} />
-          <StatTile label="PIATTO PIÙ GROSSO"
-            value={statsData?.biggest_pot != null ? `${fmt(statsData.biggest_pot)} chips` : '—'}
-            accent loading={loading} />
+          <StatTile label="SESSIONI GIOCATE"
+            value={gameHistory != null ? fmt(gameHistory.length) : '—'}
+            loading={loading} />
         </div>
       </div>
 
@@ -328,16 +325,16 @@ export default function Profile() {
         ) : (
           <div style={{ border: '1px solid rgba(212,175,55,0.12)' }}>
             <div style={{
-              display: 'grid', gridTemplateColumns: '0.8fr 1.8fr 1fr 1fr 1fr 1fr',
+              display: 'grid', gridTemplateColumns: '1fr 2fr 0.7fr 0.7fr 1fr',
               padding: '11px 18px', background: 'rgba(212,175,55,0.04)',
               borderBottom: '1px solid rgba(212,175,55,0.12)',
               fontSize: 9.5, letterSpacing: '0.2em', fontWeight: 600,
               color: 'rgba(245,241,232,0.5)',
             }}>
-              <div>DATA</div><div>TAVOLO</div><div>DURATA</div><div>MANI</div><div>RISULTATO</div><div style={{ textAlign: 'right' }}>ESITO</div>
+              <div>DATA</div><div>TAVOLO</div><div>DURATA</div><div>MANI</div><div style={{ textAlign: 'right' }}>BILANCIO</div>
             </div>
             {gameHistory.map((g, i) => {
-              const isWin = g.result_chips >= 0;
+              const isPos = g.result_chips >= 0;
               const tableLabel = g.table_type === 'sitgo' ? 'Sit & Go' : g.table_name;
               const durStr = g.duration_minutes != null
                 ? g.duration_minutes >= 60
@@ -346,7 +343,7 @@ export default function Profile() {
                 : '—';
               return (
                 <div key={i} style={{
-                  display: 'grid', gridTemplateColumns: '0.8fr 1.8fr 1fr 1fr 1fr 1fr',
+                  display: 'grid', gridTemplateColumns: '1fr 2fr 0.7fr 0.7fr 1fr',
                   padding: '14px 18px', alignItems: 'center',
                   borderBottom: i < gameHistory.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
                 }}>
@@ -359,19 +356,8 @@ export default function Profile() {
                   <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 15, color: '#F5F1E8' }}>{tableLabel}</div>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'rgba(245,241,232,0.75)' }}>{durStr}</div>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'rgba(245,241,232,0.75)' }}>{g.hands_played}</div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 500, color: isWin ? '#D4AF37' : '#c77' }}>
+                  <div style={{ textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontSize: 15, fontWeight: 600, color: isPos ? '#4caf50' : '#e57373' }}>
                     {g.result_chips >= 0 ? '+' : ''}{fmt(g.result_chips)}
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{
-                      fontSize: 9.5, letterSpacing: '0.2em', fontWeight: 600,
-                      padding: '3px 10px',
-                      color: isWin ? '#D4AF37' : 'rgba(245,241,232,0.55)',
-                      border: `1px solid ${isWin ? 'rgba(212,175,55,0.4)' : 'rgba(245,241,232,0.15)'}`,
-                      fontFamily: 'Inter, sans-serif',
-                    }}>
-                      {isWin ? 'VINTA' : 'PERSA'}
-                    </span>
                   </div>
                 </div>
               );
