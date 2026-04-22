@@ -9,6 +9,15 @@ const BLIND_SCHEDULES = {
 };
 const SPEED_LABELS = { slow: '🐢 Lenta', normal: '⚡ Normale', fast: '⚡⚡ Veloce' };
 const SPEED_TIMER = { slow: '30s per mossa', normal: '20s per mossa', fast: '10s per mossa' };
+const SITGO_PAYOUT = {
+  2: [100],
+  3: [70, 30],
+  4: [70, 30],
+  5: [50, 30, 20],
+  6: [50, 30, 20],
+  7: [50, 30, 20],
+  8: [50, 30, 20],
+};
 
 const css = {
   overlay: {
@@ -82,13 +91,16 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
   const [maxBuyin, setMaxBuyin] = useState(5000);
   const [noMaxBuyin, setNoMaxBuyin] = useState(false);
   const [startChips, setStartChips] = useState(10000);
+  const [sitgoBuyIn, setSitgoBuyIn] = useState(1000);
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
   const bb = sb * 2;
   const maxSeatCap = type === 'sitgo' ? 8 : 9;
-  const buyinPreview = useMemo(() => Math.max(1000, startChips), [startChips]);
+  const buyinPreview = useMemo(() => Math.max(100, sitgoBuyIn), [sitgoBuyIn]);
+  const payoutPreview = useMemo(() => SITGO_PAYOUT[maxSeats] ?? [100], [maxSeats]);
+  const prizePoolPreview = useMemo(() => buyinPreview * maxSeats, [buyinPreview, maxSeats]);
 
   useEffect(() => {
     if (maxSeats > maxSeatCap) setMaxSeats(maxSeatCap);
@@ -112,6 +124,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
     if (!noMaxBuyin && maxBuyin < minBuyin) errors.maxBuyin = 'Max buy-in deve essere ≥ min buy-in';
   } else {
     if (startChips < 1000) errors.startChips = 'Minimo 1000 chips';
+    if (sitgoBuyIn < 100) errors.sitgoBuyIn = 'Minimo 100 chips';
   }
 
   const canSubmit = Object.keys(errors).length === 0;
@@ -134,7 +147,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
       if (type === 'sitgo') {
         const res = await tablesApi.createSitGo({
           ...basePayload,
-          starting_chips: buyinPreview,
+          starting_chips: startChips,
           buy_in: buyinPreview,
         });
         const tableId = res.data?.table_id;
@@ -308,6 +321,22 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
                 background: 'rgba(212,175,55,0.06)', fontFamily: 'Inter, sans-serif', fontSize: 11, color: 'rgba(245,241,232,0.65)',
               }}>
                 Buy-in torneo: <span style={{ color: '#D4AF37', fontFamily: 'JetBrains Mono, monospace' }}>{buyinPreview.toLocaleString('it-IT')} chips</span>
+                <div style={{ marginTop: 6 }}>
+                  Montepremi a tavolo pieno: <span style={{ color: '#D4AF37', fontFamily: 'JetBrains Mono, monospace' }}>{prizePoolPreview.toLocaleString('it-IT')} chips</span>
+                </div>
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <NumInput
+                  label="Buy-in torneo"
+                  value={sitgoBuyIn}
+                  onChange={setSitgoBuyIn}
+                  min={100}
+                  step={100}
+                  error={visibleErrors.sitgoBuyIn}
+                />
+              </div>
+              <div style={{ marginTop: 10, fontSize: 10.5, color: 'rgba(245,241,232,0.6)', fontFamily: 'Inter, sans-serif' }}>
+                Payout top {payoutPreview.length}: <span style={{ color: '#D4AF37', fontFamily: 'JetBrains Mono, monospace' }}>{payoutPreview.join(' / ')}%</span>
               </div>
               <div style={{ marginTop: 12 }}>
                 <div style={{ ...css.label, marginBottom: 8 }}>Anteprima blind</div>

@@ -28,6 +28,9 @@ function normalizeSitGo(row = {}) {
     status,
     tableId: row.table_id ?? row.tableId ?? row.poker_table_id ?? null,
     startingChips: Number(row.starting_chips ?? row.buyin ?? row.min_buyin ?? 0),
+    buyIn: Number(row.buy_in ?? row.buyin ?? row.min_buyin ?? 0),
+    prizePool: Number(row.prize_pool ?? 0),
+    payoutStructure: Array.isArray(row.payout_structure) ? row.payout_structure : [],
     creatorUsername: row.creator_username ?? row.created_by_username ?? row.creator ?? '',
     isRegistered: row.is_registered ?? row.registered ?? row.me_registered ?? null,
   };
@@ -53,6 +56,26 @@ function useSitGos() {
   const [error, setError] = useState(null);
 
   const fetch = useCallback(() => {
+    const fallbackFromTables = async () => {
+      const fallback = await tablesApi.list();
+      const fromTables = (Array.isArray(fallback.data) ? fallback.data : [])
+        .filter((t) => String(t.table_type).toLowerCase() === 'sitgo')
+        .map((t) => normalizeSitGo({
+          id: t.id,
+          name: t.name,
+          speed: t.speed,
+          max_seats: t.max_seats,
+          min_players: t.min_players,
+          players_seated: t.players_seated,
+          status: t.status === 'waiting' ? 'registering' : t.status,
+          table_id: t.id,
+          starting_chips: t.min_buyin ?? t.max_buyin,
+          buy_in: t.min_buyin ?? t.max_buyin,
+        }));
+      setSitgos(fromTables);
+      setError(null);
+    };
+
     tablesApi.listSitGos()
       .then((res) => {
         const rows = Array.isArray(res.data) ? res.data.map(normalizeSitGo) : [];
@@ -60,31 +83,16 @@ function useSitGos() {
         setError(null);
       })
       .catch(async (err) => {
-        if ([404, 405].includes(err?.response?.status)) {
-          try {
-            const fallback = await tablesApi.list();
-            const fromTables = (Array.isArray(fallback.data) ? fallback.data : [])
-              .filter((t) => String(t.table_type).toLowerCase() === 'sitgo')
-              .map((t) => normalizeSitGo({
-                id: t.id,
-                name: t.name,
-                speed: t.speed,
-                max_seats: t.max_seats,
-                min_players: t.min_players,
-                players_seated: t.players_seated,
-                status: t.status === 'waiting' ? 'registering' : t.status,
-                table_id: t.id,
-                starting_chips: t.min_buyin ?? t.max_buyin,
-              }));
-            setSitgos(fromTables);
-            setError(null);
-          } catch {
-            setSitgos([]);
-            setError('Sit & Go non disponibile');
-          }
-        } else {
+        try {
+          await fallbackFromTables();
+        } catch {
+          const detail = String(err?.response?.data?.detail ?? '');
           setSitgos([]);
-          setError(err?.response?.data?.detail || 'Errore caricamento tornei');
+          if (detail.includes('UndefinedColumnError') || detail.includes('UndefinedTableError') || detail.includes('ProgrammingError')) {
+            setError('Backend Sit&Go non aggiornato: applica migrazioni DB');
+          } else {
+            setError(detail || 'Errore caricamento tornei');
+          }
         }
       })
       .finally(() => setLoading(false));
@@ -236,7 +244,7 @@ function SitGoSection({ tournaments, loading, error, busyMap, isRegistered, onRe
             </div>
             <SpeedBadge speed={t.speed} />
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#D4AF37' }}>
-              {(t.startingChips || 0).toLocaleString('it-IT')}
+              {(t.buyIn || t.startingChips || 0).toLocaleString('it-IT')}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               {canEnterTable && <GoldButton size="sm" onClick={() => navigate(`/table/${t.tableId}`)}>Entra</GoldButton>}
