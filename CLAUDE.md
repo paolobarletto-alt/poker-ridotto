@@ -23,8 +23,8 @@ istruzioni, apporta solo modifiche chirurgiche.
 2. Collegare `frontend/src/components/Table.jsx` al hook WebSocket reale
 3. Creare `frontend/src/components/BuyinDialog.jsx` e `CreateTableModal.jsx`
 4. Aggiornare `frontend/src/components/Lobby.jsx` con dati reali dal backend
-5. Creare `backend/routers/sitgo_router.py`
-6. Aggiungere `GET /users/me/stats` e `GET /users/me/game-history` a `users_router.py`
+5. ✅ Raffinare integrazione frontend Sit&Go (lobby/API/modal/registrazioni)
+6. Aggiungere eventuali metriche extra a `/users/me/stats` e `/users/me/game-history`
 7. Creare `backend/scheduler.py`
 
 ## Comandi utili

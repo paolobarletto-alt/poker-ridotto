@@ -309,13 +309,17 @@ class SitGoTournament(Base):
     min_players: Mapped[int] = mapped_column(Integer, nullable=False)
     max_seats: Mapped[int] = mapped_column(Integer, nullable=False)
     starting_chips: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    buy_in: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    prize_pool: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    payout_structure: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    payout_awarded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # "slow" | "normal" | "fast"
     # slow  → livelli da 900s, timer 30s
     # normal→ livelli da 600s, timer 20s
     # fast  → livelli da 300s, timer 10s
     speed: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
-    # "registering" | "running" | "finished"
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="registering")
+    # "waiting" | "running" | "finished"
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="waiting")
     # lista di {level, small_blind, big_blind, duration_seconds}
     # popolata automaticamente in base alla speed al momento della creazione
     blind_schedule: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
@@ -358,6 +362,10 @@ class SitGoRegistration(Base):
     # 1 = vincitore, null = ancora in gioco / torneo non finito
     final_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     chips_at_end: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    buy_in_amount: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    payout_awarded: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    payout_awarded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    refunded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     # ── Relazioni ──────────────────────────────────────────────

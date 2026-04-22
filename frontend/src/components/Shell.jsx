@@ -32,6 +32,7 @@ export function Sidebar({ user }) {
   const items = [
     { id: 'lobby',   label: 'Lobby',        section: 'gioca' },
     { id: 'cash',    label: 'Cash Game',     section: 'gioca' },
+    { id: 'sitgo',   label: 'Sit & Go',      section: 'gioca' },
     { id: 'table',   label: 'Nessun tavolo', section: 'sessione', disabled: true },
     { id: 'profile', label: 'Profilo',       section: 'account' },
     { id: 'race',    label: 'Race',          section: 'account' },
@@ -41,6 +42,7 @@ export function Sidebar({ user }) {
   const ROUTE_MAP_LOCAL = {
     lobby:   '/lobby',
     cash:    '/lobby/cash',
+    sitgo:   '/lobby/sitgo',
     table:   '/lobby',
     profile: '/profile',
     race:    '/race',

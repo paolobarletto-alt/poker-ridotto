@@ -10,6 +10,20 @@ export const tablesApi = {
   createTable: (data) =>
     api.post('/tables', data),
 
+  listSitGos: () =>
+    api.get('/sitgo'),
+
+  getSitGo: (id) =>
+    api.get(`/sitgo/${id}`),
+
+  createSitGo: (data) =>
+    api.post('/sitgo', data),
+
+  registerSitGo: (id) =>
+    api.post(`/sitgo/${id}/register`),
+
+  unregisterSitGo: (id) =>
+    api.delete(`/sitgo/${id}/register`),
 
 
   getCurrentSeat: () =>

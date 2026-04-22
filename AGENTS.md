@@ -36,12 +36,12 @@
 | `backend/config.py` | ✅ COMPLETO | Pydantic settings. |
 | `backend/models.py` | ✅ COMPLETO | Tutti i modelli DB. |
 | `backend/schemas.py` | ✅ COMPLETO | Estendere con SitGo schemas. |
-| `backend/main.py` | ✅ COMPLETO | Aggiungere `sitgo_router` quando creato. |
+| `backend/main.py` | ✅ COMPLETO | Include anche `sitgo_router`. |
 | `backend/routers/auth_router.py` | ✅ COMPLETO | |
 | `backend/routers/admin_router.py` | ✅ COMPLETO | |
 | `backend/routers/ws_router.py` | ⚠️ PARZIALE | join/leave DB sync da verificare. |
 | `backend/routers/users_router.py` | ⚠️ PARZIALE | Mancano `/me/stats`, `/me/game-history`, `/me/current-seat`. |
-| `backend/routers/sitgo_router.py` | ❌ DA CREARE | Vedi prompt P5 in `PIANO_IMPLEMENTAZIONE_V2.md`. |
+| `backend/routers/sitgo_router.py` | ✅ COMPLETO | CRUD, iscrizioni, auto-start, payout, integrazione game flow. |
 | `backend/scheduler.py` | ❌ DA CREARE | APScheduler daily refill. Vedi prompt P7-A. |
 
 ## Mappa dello stato — frontend
@@ -50,18 +50,18 @@
 |---|---|---|
 | `frontend/src/api/client.js` | ✅ COMPLETO | Non toccare. |
 | `frontend/src/api/auth.js` | ✅ COMPLETO | Non toccare. |
-| `frontend/src/api/tables.js` | ⚠️ PARZIALE | Aggiungere listSitGos, registerSitGo, ecc. |
+| `frontend/src/api/tables.js` | ✅ COMPLETO | Include metodi Sit&Go list/create/detail/register/unregister. |
 | `frontend/src/context/AuthContext.jsx` | ✅ COMPLETO | Non toccare. |
 | `frontend/src/App.jsx` | ✅ COMPLETO | Non toccare. |
 | `frontend/src/pages/LoginPage.jsx` | ✅ COMPLETO | Non toccare. |
 | `frontend/src/components/Shell.jsx` | ✅ COMPLETO | Non toccare. |
 | `frontend/src/hooks/usePokerTable.js` | ⚠️ PARZIALE | Aggiungere sendAction, joinSeat, leaveSeat. Vedi P1. |
 | `frontend/src/hooks/useTableChat.js` | ⚠️ PARZIALE | Completare. |
-| `frontend/src/components/Lobby.jsx` | ⚠️ PARZIALE | Dati mock → fetch reali. Vedi P4. |
+| `frontend/src/components/Lobby.jsx` | ⚠️ PARZIALE | Fetch reale tavoli+sitgo, polling e registrazione Sit&Go implementati. |
 | `frontend/src/components/Table_clean.jsx` | ⚠️ PARZIALE | Collegare al WS. Vedi P2. |
 | `frontend/src/components/Profile.jsx` | ⚠️ PARZIALE | Dati mock → fetch reali. Vedi P7-B. |
-| `frontend/src/components/BuyinDialog.jsx` | ❌ DA CREARE | Vedi P3. |
-| `frontend/src/components/CreateTableModal.jsx` | ❌ DA CREARE | Vedi P3. |
+| `frontend/src/components/BuyinDialog.jsx` | ✅ COMPLETO | Modale buy-in presente. |
+| `frontend/src/components/CreateTableModal.jsx` | ✅ COMPLETO | Supporta Cash + Sit&Go con vincoli form. |
 | `frontend/src/pages/TablePage.jsx` | ⚠️ PARZIALE | Non passa tableId. Vedi P2. |
 
 ---

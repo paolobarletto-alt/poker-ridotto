@@ -175,11 +175,8 @@ async def user_stats(
     ) or 0
 
     net_result: int = await db.scalar(
-        select(func.sum(ChipsLedger.amount))
-        .where(
-            ChipsLedger.user_id == uid,
-            ChipsLedger.reason.in_(["hand_win", "hand_loss", "sitgo_win", "sitgo_loss"]),
-        )
+        select(func.coalesce(func.sum(PlayerGameSession.result_chips), 0))
+        .where(PlayerGameSession.user_id == uid)
     ) or 0
 
     vpip = round(vpip_hands / total_hands * 100, 1) if total_hands >= 20 else None

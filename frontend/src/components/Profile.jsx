@@ -184,7 +184,7 @@ export default function Profile() {
   const plData = (() => {
     if (!Array.isArray(chipsHistory) || chipsHistory.length === 0) return null;
     const relevant = [...chipsHistory]
-      .filter(e => ['hand_win', 'hand_loss', 'sitgo_win', 'sitgo_loss'].includes(e?.reason))
+      .filter(e => ['hand_win', 'hand_loss', 'sitgo_buyin', 'sitgo_payout', 'sitgo_refund'].includes(e?.reason))
       .reverse(); // oldest first
     if (!relevant.length) return null;
     const cumulative = [];

@@ -10,17 +10,16 @@ src/
   api/
     client.js          ✅ axios + interceptor JWT — NON TOCCARE
     auth.js            ✅ login, register, me — NON TOCCARE
-    tables.js          ⚠️  aggiungere: listSitGos, registerSitGo, unregisterSitGo,
-                           createSitGo, getCurrentSeat
+    tables.js          ✅ include metodi Sit&Go (list/create/detail/register/unregister)
   components/
     Shell.jsx          ✅ Sidebar, TopBar, GoldButton, TrafficLights — NON TOCCARE
-    Lobby.jsx          ⚠️  sostituire mock con fetch reali + CreateTableModal
+    Lobby.jsx          ✅ fetch reale tavoli + Sit&Go, polling, registrazione torneo
     Table.jsx          ⚠️  collegare a usePokerTable, timer, showdown, chat
     Table_clean.jsx    ⚠️  versione attuale in uso (da unificare in Table.jsx)
     Table_fixed.jsx    🗑️  versione obsoleta, ignorare
     Profile.jsx        ⚠️  sostituire mock con fetch reali
-    BuyinDialog.jsx    ❌  DA CREARE
-    CreateTableModal.jsx ❌ DA CREARE
+    BuyinDialog.jsx    ✅ creato
+    CreateTableModal.jsx ✅ creato, supporta Cash + Sit&Go
   context/
     AuthContext.jsx    ✅ useAuth() → { user, token, login, logout, register } — NON TOCCARE
   hooks/
@@ -267,8 +266,8 @@ const {
 ```
 Nome tavolo: text (3-50 chars)
 Tipo: toggle "Cash Game" / "Sit & Go"
-Min giocatori: select 2-9
-Max posti: select min_giocatori..9
+Min giocatori: select 2-9 (Sit&Go: 2-8)
+Max posti: select min_giocatori..9 (Sit&Go: max 8)
 Velocità: toggle "Lenta" (30s) / "Normale" (20s) / "Veloce" (10s)
 --- se Cash Game ---
 Blind piccolo: number

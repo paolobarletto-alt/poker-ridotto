@@ -1,21 +1,10 @@
-"""
-sitgo_router.py — Gestione tornei Sit & Go.
-
-Endpoints:
-  GET    /sitgo                   → lista tornei attivi
-  POST   /sitgo                   → crea torneo
-  GET    /sitgo/{id}              → dettaglio + iscritti
-  POST   /sitgo/{id}/register     → iscriviti
-  DELETE /sitgo/{id}/register     → disiscrivi
-"""
-
 from __future__ import annotations
 
 import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
@@ -26,6 +15,8 @@ from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
 from models import (
     BLIND_SCHEDULES,
+    ChipsLedger,
+    PlayerGameSession,
     PokerTable,
     SitGoRegistration,
     SitGoTournament,
@@ -38,27 +29,29 @@ logger = logging.getLogger("ridotto.sitgo")
 
 router = APIRouter(prefix="/sitgo", tags=["sitgo"])
 
-# tournament_id → asyncio.Task (blind level timer)
 _blind_timer_tasks: Dict[str, asyncio.Task] = {}
 
-
-# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _payout_structure_for_players(players: int) -> list[int]:
+    if players == 2:
+        return [100]
+    if 3 <= players <= 4:
+        return [70, 30]
+    return [50, 30, 20]
+
+
 async def _build_response(tournament: SitGoTournament, db: AsyncSession) -> dict:
-    """Calcola n_registered e creator_username per un torneo."""
     n_result = await db.execute(
-        select(func.count()).select_from(SitGoRegistration)
-        .where(SitGoRegistration.tournament_id == tournament.id)
+        select(func.count()).select_from(SitGoRegistration).where(
+            SitGoRegistration.tournament_id == tournament.id
+        )
     )
     n_registered = n_result.scalar() or 0
-
-    creator_result = await db.execute(
-        select(User.username).where(User.id == tournament.created_by)
-    )
+    creator_result = await db.execute(select(User.username).where(User.id == tournament.created_by))
     creator_username = creator_result.scalar() or ""
 
     return {
@@ -66,8 +59,13 @@ async def _build_response(tournament: SitGoTournament, db: AsyncSession) -> dict
         "name": tournament.name,
         "min_players": tournament.min_players,
         "max_seats": tournament.max_seats,
+        "max_players": tournament.max_seats,
         "speed": tournament.speed,
         "starting_chips": tournament.starting_chips,
+        "buy_in": tournament.buy_in,
+        "prize_pool": tournament.prize_pool,
+        "payout_structure": tournament.payout_structure or [],
+        "payout_awarded": tournament.payout_awarded,
         "status": tournament.status,
         "blind_schedule": tournament.blind_schedule,
         "current_blind_level": tournament.current_blind_level,
@@ -80,15 +78,66 @@ async def _build_response(tournament: SitGoTournament, db: AsyncSession) -> dict
     }
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+async def _register_player(
+    db: AsyncSession,
+    tournament: SitGoTournament,
+    user: User,
+) -> int:
+    if tournament.status != "waiting":
+        raise HTTPException(status_code=400, detail="Il torneo non accetta più iscrizioni")
+
+    dup = await db.execute(
+        select(SitGoRegistration).where(
+            SitGoRegistration.tournament_id == tournament.id,
+            SitGoRegistration.user_id == user.id,
+        )
+    )
+    if dup.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Sei già iscritto a questo torneo")
+
+    n_result = await db.execute(
+        select(func.count()).select_from(SitGoRegistration).where(
+            SitGoRegistration.tournament_id == tournament.id
+        )
+    )
+    n_registered = n_result.scalar() or 0
+    if n_registered >= tournament.max_seats:
+        raise HTTPException(status_code=400, detail="Torneo pieno")
+
+    user_db = await db.get(User, user.id)
+    if user_db is None:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+    if user_db.chips_balance < tournament.buy_in:
+        raise HTTPException(status_code=400, detail="Saldo insufficiente per il buy-in del torneo")
+
+    user_db.chips_balance -= tournament.buy_in
+    db.add(
+        ChipsLedger(
+            user_id=user_db.id,
+            amount=-tournament.buy_in,
+            balance_after=user_db.chips_balance,
+            reason="sitgo_buyin",
+            game_id=tournament.id,
+            description=f"Iscrizione Sit&Go '{tournament.name}'",
+        )
+    )
+    db.add(
+        SitGoRegistration(
+            tournament_id=tournament.id,
+            user_id=user_db.id,
+            buy_in_amount=tournament.buy_in,
+        )
+    )
+    await db.flush()
+    return n_registered + 1
+
 
 @router.get("", response_model=list[SitGoResponse])
 async def list_sitgo(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(SitGoTournament)
         .where(SitGoTournament.status != "finished")
-        .order_by(SitGoTournament.started_at.desc().nullslast(),
-                  SitGoTournament.id.desc())
+        .order_by(SitGoTournament.started_at.desc().nullslast(), SitGoTournament.id.desc())
     )
     tournaments = result.scalars().all()
     rows = []
@@ -104,29 +153,28 @@ async def create_sitgo(
     db: AsyncSession = Depends(get_db),
 ):
     schedule = BLIND_SCHEDULES.get(payload.speed, BLIND_SCHEDULES["normal"])
-
+    payout_structure = _payout_structure_for_players(payload.max_seats)
     tournament = SitGoTournament(
         name=payload.name,
         min_players=payload.min_players,
         max_seats=payload.max_seats,
         starting_chips=payload.starting_chips,
+        buy_in=payload.buy_in,
         speed=payload.speed,
-        status="registering",
+        status="waiting",
         blind_schedule=schedule,
         current_blind_level=1,
+        payout_structure=payout_structure,
         created_by=current_user.id,
     )
     db.add(tournament)
-    await db.flush()  # get tournament.id before commit
-
-    # Auto-register creator
-    reg = SitGoRegistration(
-        tournament_id=tournament.id,
-        user_id=current_user.id,
-    )
-    db.add(reg)
+    await db.flush()
+    n_registered = await _register_player(db, tournament, current_user)
     await db.commit()
     await db.refresh(tournament)
+
+    if n_registered == tournament.max_seats:
+        asyncio.create_task(_start_tournament(tournament.id))
 
     return await _build_response(tournament, db)
 
@@ -136,32 +184,29 @@ async def get_sitgo(
     tournament_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(SitGoTournament).where(SitGoTournament.id == tournament_id)
-    )
+    result = await db.execute(select(SitGoTournament).where(SitGoTournament.id == tournament_id))
     tournament = result.scalar_one_or_none()
     if tournament is None:
         raise HTTPException(status_code=404, detail="Torneo non trovato")
 
     base = await _build_response(tournament, db)
-
-    # Load registrations with user info
     regs_result = await db.execute(
         select(SitGoRegistration, User.username, User.avatar_initials)
         .join(User, User.id == SitGoRegistration.user_id)
         .where(SitGoRegistration.tournament_id == tournament_id)
         .order_by(SitGoRegistration.registered_at)
     )
-    registrations = [
+    base["registrations"] = [
         SitGoRegistrationInfo(
             user_id=row.SitGoRegistration.user_id,
             username=row.username,
             avatar_initials=row.avatar_initials,
             registered_at=row.SitGoRegistration.registered_at,
+            final_position=row.SitGoRegistration.final_position,
+            payout_awarded=row.SitGoRegistration.payout_awarded,
         )
         for row in regs_result
     ]
-    base["registrations"] = registrations
     return base
 
 
@@ -172,43 +217,19 @@ async def register_sitgo(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(SitGoTournament).where(SitGoTournament.id == tournament_id)
+        select(SitGoTournament).where(SitGoTournament.id == tournament_id).with_for_update()
     )
     tournament = result.scalar_one_or_none()
     if tournament is None:
         raise HTTPException(status_code=404, detail="Torneo non trovato")
-    if tournament.status != "registering":
-        raise HTTPException(status_code=400, detail="Il torneo non accetta più iscrizioni")
 
-    # Check duplicate
-    dup = await db.execute(
-        select(SitGoRegistration).where(
-            SitGoRegistration.tournament_id == tournament_id,
-            SitGoRegistration.user_id == current_user.id,
-        )
-    )
-    if dup.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Sei già iscritto a questo torneo")
-
-    # Count current registrations
-    n_result = await db.execute(
-        select(func.count()).select_from(SitGoRegistration)
-        .where(SitGoRegistration.tournament_id == tournament_id)
-    )
-    n_registered = (n_result.scalar() or 0) + 1  # +1 for the new one
-
-    reg = SitGoRegistration(
-        tournament_id=tournament_id,
-        user_id=current_user.id,
-    )
-    db.add(reg)
+    n_registered = await _register_player(db, tournament, current_user)
     await db.commit()
 
-    # Auto-start if full
-    if n_registered >= tournament.max_seats:
+    if n_registered == tournament.max_seats:
         asyncio.create_task(_start_tournament(tournament_id))
 
-    return {"message": "Iscritto", "n_registered": n_registered, "max_seats": tournament.max_seats}
+    return {"message": "Iscrizione completata", "n_registered": n_registered, "max_seats": tournament.max_seats}
 
 
 @router.delete("/{tournament_id}/register")
@@ -218,13 +239,13 @@ async def unregister_sitgo(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(SitGoTournament).where(SitGoTournament.id == tournament_id)
+        select(SitGoTournament).where(SitGoTournament.id == tournament_id).with_for_update()
     )
     tournament = result.scalar_one_or_none()
     if tournament is None:
         raise HTTPException(status_code=404, detail="Torneo non trovato")
-    if tournament.status != "registering":
-        raise HTTPException(status_code=400, detail="Impossibile ritirarsi: il torneo è già iniziato")
+    if tournament.status != "waiting":
+        raise HTTPException(status_code=400, detail="Impossibile disiscriversi: torneo già avviato")
 
     reg_result = await db.execute(
         select(SitGoRegistration).where(
@@ -236,42 +257,48 @@ async def unregister_sitgo(
     if reg is None:
         raise HTTPException(status_code=404, detail="Non sei iscritto a questo torneo")
 
-    await db.delete(reg)
-    await db.commit()
+    user_db = await db.get(User, current_user.id)
+    if user_db is None:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
 
-    # Check if tournament is now empty → close it
+    refund = reg.buy_in_amount or tournament.buy_in
+    user_db.chips_balance += refund
+    reg.refunded_at = _now()
+    db.add(
+        ChipsLedger(
+            user_id=user_db.id,
+            amount=refund,
+            balance_after=user_db.chips_balance,
+            reason="sitgo_refund",
+            game_id=tournament.id,
+            description=f"Rimborso disiscrizione Sit&Go '{tournament.name}'",
+        )
+    )
+    await db.delete(reg)
+    await db.flush()
+
     n_result = await db.execute(
-        select(func.count()).select_from(SitGoRegistration)
-        .where(SitGoRegistration.tournament_id == tournament_id)
+        select(func.count()).select_from(SitGoRegistration).where(
+            SitGoRegistration.tournament_id == tournament_id
+        )
     )
     remaining = n_result.scalar() or 0
     if remaining == 0:
-        t_result = await db.execute(
-            select(SitGoTournament).where(SitGoTournament.id == tournament_id)
-        )
-        t = t_result.scalar_one_or_none()
-        if t:
-            t.status = "finished"
-            await db.commit()
+        tournament.status = "finished"
+        tournament.finished_at = _now()
 
-    return {"message": "Disiscritto"}
+    await db.commit()
+    return {"message": "Disiscrizione completata"}
 
-
-# ── Background tasks ──────────────────────────────────────────────────────────
 
 async def _start_tournament(tournament_id: uuid.UUID):
-    """
-    Avviato come asyncio.Task quando il torneo raggiunge max_seats.
-    Crea il PokerTable, assegna i posti, e avvia la prima mano.
-    """
     async with AsyncSessionLocal() as db:
         try:
-            # 1. Carica torneo e registrazioni
             t_result = await db.execute(
-                select(SitGoTournament).where(SitGoTournament.id == tournament_id)
+                select(SitGoTournament).where(SitGoTournament.id == tournament_id).with_for_update()
             )
             tournament = t_result.scalar_one_or_none()
-            if tournament is None or tournament.status != "registering":
+            if tournament is None or tournament.status != "waiting":
                 return
 
             regs_result = await db.execute(
@@ -280,12 +307,17 @@ async def _start_tournament(tournament_id: uuid.UUID):
                 .order_by(SitGoRegistration.registered_at)
             )
             registrations = regs_result.scalars().all()
+            if len(registrations) != tournament.max_seats:
+                return
 
             schedule = tournament.blind_schedule
-            first_sb = schedule[0]["small_blind"]
-            first_bb = schedule[0]["big_blind"]
+            first_level = schedule[0]
+            first_sb = first_level["small_blind"]
+            first_bb = first_level["big_blind"]
+            prize_pool = tournament.buy_in * len(registrations)
+            tournament.prize_pool = prize_pool
+            tournament.payout_structure = _payout_structure_for_players(len(registrations))
 
-            # 2. Crea PokerTable in DB
             poker_table = PokerTable(
                 name=tournament.name,
                 table_type="sitgo",
@@ -296,162 +328,155 @@ async def _start_tournament(tournament_id: uuid.UUID):
                 big_blind=first_bb,
                 min_buyin=tournament.starting_chips,
                 max_buyin=tournament.starting_chips,
-                status="waiting",
+                status="running",
                 created_by=tournament.created_by,
             )
             db.add(poker_table)
             await db.flush()
-
             table_id = str(poker_table.id)
 
-            # 3. Crea TableSeat per ogni iscritto
             for seat_number, reg in enumerate(registrations):
-                seat = TableSeat(
-                    table_id=poker_table.id,
-                    user_id=reg.user_id,
-                    seat_number=seat_number,
-                    stack=tournament.starting_chips,
-                    status="active",
+                db.add(
+                    TableSeat(
+                        table_id=poker_table.id,
+                        user_id=reg.user_id,
+                        seat_number=seat_number,
+                        stack=tournament.starting_chips,
+                        status="active",
+                    )
                 )
-                db.add(seat)
+                db.add(
+                    PlayerGameSession(
+                        user_id=reg.user_id,
+                        table_id=poker_table.id,
+                        table_name=tournament.name,
+                        table_type="sitgo",
+                        seat_number=seat_number,
+                        total_buyin=tournament.buy_in,
+                        current_stack=tournament.starting_chips,
+                        result_chips=0,
+                        hands_played=0,
+                        status="open",
+                        started_at=_now(),
+                        last_activity_at=_now(),
+                    )
+                )
                 game_manager.register_seat(table_id, str(reg.user_id), seat_number)
 
-            # 4. Crea GiocoPoker in game_manager
             game = game_manager.get_or_create_table(
                 table_id=table_id,
                 small_blind=first_sb,
                 big_blind=first_bb,
                 speed=tournament.speed,
             )
-
-            # Aggiungi giocatori al motore
-            for seat_number, reg in enumerate(registrations):
+            for reg in registrations:
                 game.aggiungi_giocatore(
                     player_id=str(reg.user_id),
                     nome=str(reg.user_id),
                     stack=tournament.starting_chips,
                 )
 
-            # Registra mapping tournament
-            game_manager.register_tournament(table_id, str(tournament_id))
-
-            # 5. Aggiorna tournament
             tournament.status = "running"
             tournament.table_id = poker_table.id
             tournament.started_at = _now()
             tournament.level_started_at = _now()
-            poker_table.status = "running"
-
+            game_manager.register_tournament(table_id, str(tournament_id))
             await db.commit()
 
-            logger.info(
-                "Torneo %s avviato → tavolo %s con %d giocatori",
-                tournament_id, table_id, len(registrations)
-            )
-
-            # 6. Avvia blind level timer
-            timer_task = asyncio.create_task(
-                _blind_level_timer(str(tournament_id), table_id)
-            )
+            timer_task = asyncio.create_task(_blind_level_timer(str(tournament_id), table_id))
             _blind_timer_tasks[str(tournament_id)] = timer_task
 
-            # 7. Avvia prima mano
             game.inizia_mano()
-
-            # 8. Broadcast stato iniziale
             await game_manager.broadcast_state(table_id)
-
-            # Avvia timer per il primo giocatore di turno
             if game.turno_attivo:
                 await game_manager.start_action_timer(table_id, game.turno_attivo)
 
+            logger.info(
+                "Sit&Go %s avviato su tavolo %s (%d giocatori)",
+                tournament_id,
+                table_id,
+                len(registrations),
+            )
         except Exception:
-            logger.exception("Errore avvio torneo %s", tournament_id)
+            logger.exception("Errore avvio Sit&Go %s", tournament_id)
 
 
 async def _blind_level_timer(tournament_id: str, table_id: str):
-    """
-    Ciclo che gestisce l'avanzamento dei livelli dei blind.
-    Gira per tutta la durata del torneo.
-    """
     while True:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
                 select(SitGoTournament).where(SitGoTournament.id == uuid.UUID(tournament_id))
             )
             tournament = result.scalar_one_or_none()
-
         if tournament is None or tournament.status != "running":
             break
 
-        schedule = tournament.blind_schedule
-        current_level = tournament.current_blind_level
-        level_idx = current_level - 1
-
-        if level_idx >= len(schedule):
-            # Siamo all'ultimo livello, aspettiamo ma non aggiorniamo
-            await asyncio.sleep(60)
+        schedule = tournament.blind_schedule or []
+        current_level_idx = max(tournament.current_blind_level - 1, 0)
+        if current_level_idx >= len(schedule):
+            await asyncio.sleep(30)
             continue
 
-        duration = schedule[level_idx]["duration_seconds"]
+        duration = schedule[current_level_idx]["duration_seconds"]
         await asyncio.sleep(duration)
 
-        # Ricontrolla dopo il sleep
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(SitGoTournament).where(SitGoTournament.id == uuid.UUID(tournament_id))
+                select(SitGoTournament).where(SitGoTournament.id == uuid.UUID(tournament_id)).with_for_update()
             )
             tournament = result.scalar_one_or_none()
             if tournament is None or tournament.status != "running":
                 break
 
             next_level = tournament.current_blind_level + 1
-            if next_level > len(schedule):
-                # Ultimo livello raggiunto, i blind rimangono fissi
+            if next_level > len(tournament.blind_schedule or []):
+                await asyncio.sleep(30)
                 continue
 
-            new_level_data = schedule[next_level - 1]
+            level_data = tournament.blind_schedule[next_level - 1]
             tournament.current_blind_level = next_level
             tournament.level_started_at = _now()
+
+            if tournament.table_id:
+                table = await db.get(PokerTable, tournament.table_id)
+                if table:
+                    table.small_blind = level_data["small_blind"]
+                    table.big_blind = level_data["big_blind"]
+
             await db.commit()
 
-            # Aggiorna game engine
-            game = game_manager.get_table(table_id)
-            if game:
-                game.min_bet = new_level_data["big_blind"]
+        game = game_manager.get_table(table_id)
+        if game:
+            game.min_bet = level_data["big_blind"]
 
-            # Calcola durata prossimo livello (se esiste)
-            next_dur = schedule[next_level]["duration_seconds"] if next_level < len(schedule) else 0
-
-            await game_manager.broadcast(table_id, {
+        await game_manager.broadcast(
+            table_id,
+            {
                 "type": "blind_level_up",
                 "level": next_level,
-                "small_blind": new_level_data["small_blind"],
-                "big_blind": new_level_data["big_blind"],
-                "next_level_in": next_dur,
-            })
-
-            logger.info(
-                "Torneo %s → livello blind %d (SB=%d BB=%d)",
-                tournament_id, next_level,
-                new_level_data["small_blind"], new_level_data["big_blind"],
-            )
+                "small_blind": level_data["small_blind"],
+                "big_blind": level_data["big_blind"],
+                "next_level_in": level_data["duration_seconds"],
+            },
+        )
 
 
 async def handle_sitgo_hand_end(table_id: str, db: AsyncSession):
-    """
-    Da chiamare alla fine di ogni mano in un torneo Sit & Go.
-    Controlla eliminazioni e vittoria.
-    """
     tournament_id = game_manager.get_tournament_id(table_id)
     if not tournament_id:
+        return
+
+    tournament_result = await db.execute(
+        select(SitGoTournament).where(SitGoTournament.id == uuid.UUID(tournament_id))
+    )
+    tournament = tournament_result.scalar_one_or_none()
+    if tournament is None or tournament.status != "running":
         return
 
     game = game_manager.get_table(table_id)
     if game is None:
         return
 
-    # Carica iscrizioni ancora attive
     regs_result = await db.execute(
         select(SitGoRegistration, User.username)
         .join(User, User.id == SitGoRegistration.user_id)
@@ -461,69 +486,56 @@ async def handle_sitgo_hand_end(table_id: str, db: AsyncSession):
         )
         .order_by(SitGoRegistration.registered_at)
     )
-    active_regs = list(regs_result)
-    players_in_game = len(active_regs)
+    active_rows = list(regs_result)
+    players_in_game = len(active_rows)
 
-    eliminated: list[str] = []
-
-    for row in active_regs:
+    eliminated_rows = []
+    for row in active_rows:
         reg = row.SitGoRegistration
-        user_id_str = str(reg.user_id)
-        seat = game_manager.seat_for_user(table_id, user_id_str)
-        if seat is None:
-            continue
-        stack = game_manager.get_player_stack(table_id, user_id_str)
-        if stack is not None and stack == 0:
-            eliminated.append(user_id_str)
+        uid = str(reg.user_id)
+        stack = game_manager.get_player_stack(table_id, uid)
+        if stack is not None and stack <= 0:
+            eliminated_rows.append(row)
 
-    # Assegna posizioni agli eliminati (dal peggiore al migliore, inverso all'ordine di uscita)
-    remaining_after = players_in_game - len(eliminated)
+    if not eliminated_rows:
+        return
 
-    for user_id_str in eliminated:
-        position = remaining_after + 1
-        remaining_after -= 1
+    next_position = players_in_game
+    for row in eliminated_rows:
+        reg = row.SitGoRegistration
+        uid = str(reg.user_id)
+        seat = game_manager.seat_for_user(table_id, uid)
 
-        reg_result = await db.execute(
-            select(SitGoRegistration).where(
-                SitGoRegistration.tournament_id == uuid.UUID(tournament_id),
-                SitGoRegistration.user_id == uuid.UUID(user_id_str),
-            )
-        )
-        reg = reg_result.scalar_one_or_none()
-        if reg:
-            reg.final_position = position
-            reg.chips_at_end = 0
+        reg.final_position = next_position
+        reg.chips_at_end = 0
+        next_position -= 1
 
-        # Rimuovi da game manager
-        seat = game_manager.seat_for_user(table_id, user_id_str)
-        game_manager.unregister_seat(table_id, user_id_str)
+        if uid in game.seats:
+            game.rimuovi_giocatore(uid)
+        game_manager.unregister_seat(table_id, uid)
 
-        # Rimuovi TableSeat da DB
         seat_result = await db.execute(
             select(TableSeat).where(
                 TableSeat.table_id == uuid.UUID(table_id),
-                TableSeat.user_id == uuid.UUID(user_id_str),
+                TableSeat.user_id == reg.user_id,
             )
         )
-        ts = seat_result.scalar_one_or_none()
-        if ts:
-            await db.delete(ts)
+        table_seat = seat_result.scalar_one_or_none()
+        if table_seat:
+            await db.delete(table_seat)
 
-        # Ottieni username per broadcast
-        user_result = await db.execute(select(User.username).where(User.id == uuid.UUID(user_id_str)))
-        username = user_result.scalar() or user_id_str
+        await game_manager.broadcast(
+            table_id,
+            {
+                "type": "player_eliminated",
+                "seat": seat,
+                "position": reg.final_position,
+                "username": row.username,
+            },
+        )
 
-        await game_manager.broadcast(table_id, {
-            "type": "player_eliminated",
-            "seat": seat,
-            "position": position,
-            "username": username,
-        })
-        logger.info("Torneo %s: %s eliminato in posizione %d", tournament_id, username, position)
+    await db.flush()
 
-    await db.commit()
-
-    # Ricontrolla quanti restano
     remaining_result = await db.execute(
         select(func.count()).select_from(SitGoRegistration).where(
             SitGoRegistration.tournament_id == uuid.UUID(tournament_id),
@@ -531,22 +543,32 @@ async def handle_sitgo_hand_end(table_id: str, db: AsyncSession):
         )
     )
     remaining = remaining_result.scalar() or 0
+    if remaining != 1:
+        await db.commit()
+        return
 
-    if remaining == 1:
-        # Trova vincitore
-        winner_result = await db.execute(
-            select(SitGoRegistration, User.username)
-            .join(User, User.id == SitGoRegistration.user_id)
-            .where(
-                SitGoRegistration.tournament_id == uuid.UUID(tournament_id),
-                SitGoRegistration.final_position.is_(None),
-            )
+    winner_result = await db.execute(
+        select(SitGoRegistration, User.username)
+        .join(User, User.id == SitGoRegistration.user_id)
+        .where(
+            SitGoRegistration.tournament_id == uuid.UUID(tournament_id),
+            SitGoRegistration.final_position.is_(None),
         )
-        winner_row = winner_result.first()
-        if winner_row:
-            winner_uid = str(winner_row.SitGoRegistration.user_id)
-            winner_stack = game_manager.get_player_stack(table_id, winner_uid) or 0
-            await _finish_tournament(tournament_id, winner_uid, winner_stack, table_id, db)
+    )
+    winner_row = winner_result.first()
+    if winner_row is None:
+        await db.commit()
+        return
+
+    winner_user_id = str(winner_row.SitGoRegistration.user_id)
+    winner_stack = game_manager.get_player_stack(table_id, winner_user_id) or 0
+    await _finish_tournament(
+        tournament_id=tournament_id,
+        winner_user_id=winner_user_id,
+        winner_stack=winner_stack,
+        table_id=table_id,
+        db=db,
+    )
 
 
 async def _finish_tournament(
@@ -556,77 +578,126 @@ async def _finish_tournament(
     table_id: str,
     db: AsyncSession,
 ):
-    """Chiude il torneo, assegna posizione 1 al vincitore, broadcast finale."""
-    # 1. Vincitore
-    reg_result = await db.execute(
+    now = _now()
+    tournament = await db.get(SitGoTournament, uuid.UUID(tournament_id))
+    if tournament is None:
+        return
+
+    winner_reg_result = await db.execute(
         select(SitGoRegistration).where(
-            SitGoRegistration.tournament_id == uuid.UUID(tournament_id),
+            SitGoRegistration.tournament_id == tournament.id,
             SitGoRegistration.user_id == uuid.UUID(winner_user_id),
         )
     )
-    reg = reg_result.scalar_one_or_none()
-    if reg:
-        reg.final_position = 1
-        reg.chips_at_end = winner_stack
+    winner_reg = winner_reg_result.scalar_one_or_none()
+    if winner_reg:
+        winner_reg.final_position = 1
+        winner_reg.chips_at_end = winner_stack
 
-    # 2. Aggiorna torneo
-    t_result = await db.execute(
-        select(SitGoTournament).where(SitGoTournament.id == uuid.UUID(tournament_id))
+    tournament.status = "finished"
+    tournament.finished_at = now
+
+    results_result = await db.execute(
+        select(SitGoRegistration, User)
+        .join(User, User.id == SitGoRegistration.user_id)
+        .where(SitGoRegistration.tournament_id == tournament.id)
+        .order_by(SitGoRegistration.final_position.asc().nullslast())
     )
-    tournament = t_result.scalar_one_or_none()
-    if tournament:
-        tournament.status = "finished"
-        tournament.finished_at = _now()
+    results = results_result.all()
+
+    percentages = tournament.payout_structure or _payout_structure_for_players(len(results))
+    payouts: dict[int, int] = {}
+    distributed = 0
+    for idx, pct in enumerate(percentages, start=1):
+        amount = (tournament.prize_pool * int(pct)) // 100
+        payouts[idx] = amount
+        distributed += amount
+    if payouts:
+        payouts[1] += tournament.prize_pool - distributed
+
+    for row in results:
+        reg = row.SitGoRegistration
+        user = row.User
+        position = reg.final_position or 0
+        payout = payouts.get(position, 0)
+        reg.payout_awarded = payout
+        reg.payout_awarded_at = now if payout > 0 else None
+        if payout > 0:
+            user.chips_balance += payout
+            db.add(
+                ChipsLedger(
+                    user_id=user.id,
+                    amount=payout,
+                    balance_after=user.chips_balance,
+                    reason="sitgo_payout",
+                    game_id=tournament.id,
+                    description=f"Premio Sit&Go '{tournament.name}' posizione {position}",
+                )
+            )
+
+    tournament.payout_awarded = True
+    table_uuid = tournament.table_id
+
+    if tournament.table_id:
+        sessions_result = await db.execute(
+            select(PlayerGameSession).where(
+                PlayerGameSession.table_id == tournament.table_id,
+                PlayerGameSession.status == "open",
+            )
+        )
+        sessions = sessions_result.scalars().all()
+        reg_map = {r.SitGoRegistration.user_id: r.SitGoRegistration for r in results}
+        for session in sessions:
+            reg = reg_map.get(session.user_id)
+            if reg is None:
+                continue
+            session.current_stack = reg.chips_at_end or 0
+            session.cashout = reg.payout_awarded
+            session.result_chips = reg.payout_awarded - session.total_buyin
+            session.status = "closed"
+            session.close_reason = "tournament_finished"
+            session.ended_at = now
+            session.last_activity_at = now
 
     await db.commit()
 
-    # 3. Cancella blind timer
+    winner_name_result = await db.execute(select(User.username).where(User.id == uuid.UUID(winner_user_id)))
+    winner_username = winner_name_result.scalar() or winner_user_id
+    payload_results = [
+        {
+            "position": row.SitGoRegistration.final_position,
+            "username": row.User.username,
+            "chips_at_end": row.SitGoRegistration.chips_at_end,
+            "payout": row.SitGoRegistration.payout_awarded,
+        }
+        for row in results
+    ]
+    await game_manager.broadcast(
+        table_id,
+        {
+            "type": "tournament_ended",
+            "winner_username": winner_username,
+            "prize_pool": tournament.prize_pool,
+            "position_results": payload_results,
+        },
+    )
+
     task = _blind_timer_tasks.pop(tournament_id, None)
     if task and not task.done():
         task.cancel()
 
-    # 4. Carica risultati
-    results_result = await db.execute(
-        select(SitGoRegistration, User.username)
-        .join(User, User.id == SitGoRegistration.user_id)
-        .where(SitGoRegistration.tournament_id == uuid.UUID(tournament_id))
-        .order_by(SitGoRegistration.final_position)
-    )
-    results = results_result.all()
-
-    winner_username_result = await db.execute(
-        select(User.username).where(User.id == uuid.UUID(winner_user_id))
-    )
-    winner_username = winner_username_result.scalar() or winner_user_id
-
-    position_results = [
-        {
-            "position": row.SitGoRegistration.final_position,
-            "username": row.username,
-            "chips_at_end": row.SitGoRegistration.chips_at_end,
-        }
-        for row in results
-    ]
-
-    # 5. Broadcast
-    await game_manager.broadcast(table_id, {
-        "type": "tournament_ended",
-        "winner_username": winner_username,
-        "position_results": position_results,
-    })
-
-    logger.info("Torneo %s terminato. Vincitore: %s", tournament_id, winner_username)
-
-    # 6. Dopo 30s: chiudi il PokerTable
     async def _close_table():
         await asyncio.sleep(30)
         async with AsyncSessionLocal() as close_db:
-            tbl_result = await close_db.execute(
-                select(PokerTable).where(PokerTable.id == uuid.UUID(table_id))
-            )
-            tbl = tbl_result.scalar_one_or_none()
-            if tbl:
-                tbl.status = "closed"
+            if table_uuid:
+                table = await close_db.get(PokerTable, table_uuid)
+                if table:
+                    table.status = "closed"
+                seats_result = await close_db.execute(
+                    select(TableSeat).where(TableSeat.table_id == table_uuid)
+                )
+                for seat in seats_result.scalars().all():
+                    await close_db.delete(seat)
                 await close_db.commit()
         game_manager.remove_table(table_id)
         game_manager.unregister_tournament(table_id)

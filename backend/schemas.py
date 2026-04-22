@@ -137,6 +137,7 @@ class SitGoCreate(BaseModel):
     max_seats: int
     speed: str
     starting_chips: int
+    buy_in: int
 
     @field_validator("name")
     @classmethod
@@ -148,15 +149,15 @@ class SitGoCreate(BaseModel):
     @field_validator("min_players")
     @classmethod
     def min_players_range(cls, v: int) -> int:
-        if not (2 <= v <= 9):
-            raise ValueError("min_players deve essere tra 2 e 9")
+        if not (2 <= v <= 8):
+            raise ValueError("min_players deve essere tra 2 e 8")
         return v
 
     @field_validator("max_seats")
     @classmethod
     def max_seats_range(cls, v: int) -> int:
-        if not (2 <= v <= 9):
-            raise ValueError("max_seats deve essere tra 2 e 9")
+        if not (2 <= v <= 8):
+            raise ValueError("max_seats deve essere tra 2 e 8")
         return v
 
     @field_validator("speed")
@@ -173,6 +174,13 @@ class SitGoCreate(BaseModel):
             raise ValueError("starting_chips deve essere almeno 1000")
         return v
 
+    @field_validator("buy_in")
+    @classmethod
+    def buyin_min(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("buy_in deve essere maggiore di 0")
+        return v
+
     def model_post_init(self, __context) -> None:
         if self.max_seats < self.min_players:
             raise ValueError("max_seats deve essere >= min_players")
@@ -183,6 +191,8 @@ class SitGoRegistrationInfo(BaseModel):
     username: str
     avatar_initials: Optional[str]
     registered_at: datetime
+    final_position: Optional[int] = None
+    payout_awarded: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -194,6 +204,10 @@ class SitGoResponse(BaseModel):
     max_seats: int
     speed: str
     starting_chips: int
+    buy_in: int
+    prize_pool: int
+    payout_structure: list[int]
+    payout_awarded: bool
     status: str
     blind_schedule: list
     current_blind_level: int
@@ -202,6 +216,7 @@ class SitGoResponse(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     n_registered: int
+    max_players: int
     creator_username: str
 
     model_config = {"from_attributes": True}

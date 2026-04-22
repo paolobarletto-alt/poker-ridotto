@@ -456,9 +456,11 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
         if (msg.table) {
           // Normalizza sia il formato snake_case che camelCase
           const t = msg.table;
+          const tableType = t.table_type ?? t.tipo ?? 'cash';
+          setIsTournament(tableType === 'sitgo');
           setTableConfig({
             name:        t.name        ?? t.nome       ?? '',
-            table_type:  t.table_type  ?? t.tipo       ?? 'cash',
+            table_type:  tableType,
             min_players: t.min_players ?? 2,
             max_seats:   t.max_seats   ?? MAX_SEATS,
             speed:       t.speed       ?? 'normal',

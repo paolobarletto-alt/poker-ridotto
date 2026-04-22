@@ -930,7 +930,7 @@ export default function PokerTable({
                 blindLevelEndsAt={blindLevelEndsAt}
                 seats={seats}
                 eliminatedPlayers={eliminatedPlayers}
-                myUserId={null}
+                myUserId={user?.id ?? null}
               />
             )}
 
@@ -1240,7 +1240,7 @@ export default function PokerTable({
       {tournamentEnded && (
         <TournamentEndOverlay
           result={tournamentEnded}
-          currentUsername={null}
+          currentUsername={user?.username ?? null}
         />
       )}
     </div>

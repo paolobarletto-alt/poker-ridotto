@@ -1,50 +1,105 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoldButton, TopBar } from './Shell';
 import { tablesApi } from '../api/tables';
+import { useAuth } from '../context/AuthContext';
 import CreateTableModal from './CreateTableModal';
 
-// ————— Shimmer keyframes injected once —————
 if (typeof document !== 'undefined' && !document.getElementById('ridotto-shimmer')) {
   const tag = document.createElement('style');
   tag.id = 'ridotto-shimmer';
   tag.textContent = `
-    @keyframes shimmer {
-      0%   { opacity: 0.5; }
-      50%  { opacity: 1; }
-      100% { opacity: 0.5; }
-    }
-    @keyframes pulseDot {
-      0%, 100% { box-shadow: 0 0 4px rgba(40,200,64,0.5); }
-      50%       { box-shadow: 0 0 10px rgba(40,200,64,0.9); }
-    }
+    @keyframes shimmer { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+    @keyframes pulseDot { 0%,100% { box-shadow: 0 0 4px rgba(40,200,64,0.5); } 50% { box-shadow: 0 0 10px rgba(40,200,64,0.9); } }
   `;
   document.head.appendChild(tag);
 }
 
-// ————— Data hooks —————
+function normalizeSitGo(row = {}) {
+  const statusRaw = String(row.status ?? row.tournament_status ?? '').toLowerCase();
+  const status = statusRaw || 'registering';
+  return {
+    id: String(row.id ?? row.tournament_id ?? ''),
+    name: row.name ?? row.title ?? 'Sit & Go',
+    speed: row.speed ?? 'normal',
+    maxSeats: Number(row.max_seats ?? row.maxSeats ?? 0),
+    minPlayers: Number(row.min_players ?? row.minPlayers ?? 2),
+    nRegistered: Number(row.n_registered ?? row.registered_count ?? row.players_seated ?? 0),
+    status,
+    tableId: row.table_id ?? row.tableId ?? row.poker_table_id ?? null,
+    startingChips: Number(row.starting_chips ?? row.buyin ?? row.min_buyin ?? 0),
+    creatorUsername: row.creator_username ?? row.created_by_username ?? row.creator ?? '',
+    isRegistered: row.is_registered ?? row.registered ?? row.me_registered ?? null,
+  };
+}
+
 function useTables() {
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const fetch = useCallback(() => {
     tablesApi.list()
-      .then(res => { setTables(res.data); setError(null); })
-      .catch(err => setError(err?.response?.data?.detail || 'Errore'))
+      .then((res) => { setTables(Array.isArray(res.data) ? res.data : []); setError(null); })
+      .catch((err) => setError(err?.response?.data?.detail || 'Errore caricamento tavoli'))
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => { fetch(); const id = setInterval(fetch, 10000); return () => clearInterval(id); }, [fetch]);
-  return { tables, loading, error };
+  return { tables, loading, error, refresh: fetch };
 }
 
+function useSitGos() {
+  const [sitgos, setSitgos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  const fetch = useCallback(() => {
+    tablesApi.listSitGos()
+      .then((res) => {
+        const rows = Array.isArray(res.data) ? res.data.map(normalizeSitGo) : [];
+        setSitgos(rows);
+        setError(null);
+      })
+      .catch(async (err) => {
+        if ([404, 405].includes(err?.response?.status)) {
+          try {
+            const fallback = await tablesApi.list();
+            const fromTables = (Array.isArray(fallback.data) ? fallback.data : [])
+              .filter((t) => String(t.table_type).toLowerCase() === 'sitgo')
+              .map((t) => normalizeSitGo({
+                id: t.id,
+                name: t.name,
+                speed: t.speed,
+                max_seats: t.max_seats,
+                min_players: t.min_players,
+                players_seated: t.players_seated,
+                status: t.status === 'waiting' ? 'registering' : t.status,
+                table_id: t.id,
+                starting_chips: t.min_buyin ?? t.max_buyin,
+              }));
+            setSitgos(fromTables);
+            setError(null);
+          } catch {
+            setSitgos([]);
+            setError('Sit & Go non disponibile');
+          }
+        } else {
+          setSitgos([]);
+          setError(err?.response?.data?.detail || 'Errore caricamento tornei');
+        }
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { fetch(); const id = setInterval(fetch, 10000); return () => clearInterval(id); }, [fetch]);
+  return { sitgos, loading, error, refresh: fetch };
+}
 
 function useOnlineUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const fetch = useCallback(() => {
     tablesApi.getOnlineUsers()
-      .then(res => setUsers(res.data))
+      .then((res) => setUsers(Array.isArray(res.data) ? res.data : []))
       .catch(() => setUsers([]))
       .finally(() => setLoading(false));
   }, []);
@@ -52,33 +107,14 @@ function useOnlineUsers() {
   return { users, loading };
 }
 
-// ————— Shared components —————
 function SpeedBadge({ speed }) {
   const map = {
-    fast:   { label: '⚡ FAST',  color: '#D4AF37' },
-    normal: { label: 'NORMALE',  color: 'rgba(245,241,232,0.6)' },
-    slow:   { label: '🐢 LENTA', color: 'rgba(245,241,232,0.5)' },
+    fast: { label: '⚡ FAST', color: '#D4AF37' },
+    normal: { label: 'NORMALE', color: 'rgba(245,241,232,0.6)' },
+    slow: { label: '🐢 LENTA', color: 'rgba(245,241,232,0.5)' },
   };
-  const m = map[speed?.toLowerCase()] || { label: speed?.toUpperCase() || '—', color: 'rgba(245,241,232,0.5)' };
-  return (
-    <span style={{
-      fontFamily: 'Inter, sans-serif', fontSize: 9.5, fontWeight: 600,
-      padding: '3px 8px', borderRadius: 2, letterSpacing: '0.12em',
-      color: m.color, border: `1px solid ${m.color}33`, background: `${m.color}11`,
-    }}>{m.label}</span>
-  );
-}
-
-function Pill({ children, accent = false }) {
-  return (
-    <span style={{
-      fontFamily: 'Inter, sans-serif', fontSize: 9.5, fontWeight: 600,
-      padding: '3px 8px', borderRadius: 2, letterSpacing: '0.14em',
-      color: accent ? '#0a0a0a' : '#D4AF37',
-      background: accent ? '#D4AF37' : 'rgba(212,175,55,0.1)',
-      border: accent ? 'none' : '1px solid rgba(212,175,55,0.25)',
-    }}>{children}</span>
-  );
+  const m = map[String(speed).toLowerCase()] || { label: String(speed || '—').toUpperCase(), color: 'rgba(245,241,232,0.5)' };
+  return <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 9.5, fontWeight: 600, padding: '3px 8px', borderRadius: 2, letterSpacing: '0.12em', color: m.color, border: `1px solid ${m.color}33`, background: `${m.color}11` }}>{m.label}</span>;
 }
 
 function SkeletonRow() {
@@ -97,162 +133,33 @@ function SectionHeading({ overline, title, action }) {
   );
 }
 
-// ————— Online Users section —————
 function OnlineUsersSection({ users, loading }) {
   if (loading) {
-    return (
-      <div style={{ margin: '0 32px', display: 'flex', gap: 12 }}>
-        {[1, 2, 3, 4].map(i => (
-          <div key={i} style={{
-            width: 56, height: 56, borderRadius: '50%',
-            background: 'rgba(212,175,55,0.06)', animation: 'shimmer 1.4s ease-in-out infinite',
-          }} />
-        ))}
-      </div>
-    );
+    return <div style={{ margin: '0 32px', display: 'flex', gap: 12 }}>{[1, 2, 3, 4].map((i) => <div key={i} style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(212,175,55,0.06)', animation: 'shimmer 1.4s ease-in-out infinite' }} />)}</div>;
   }
-
-  if (!users.length) {
-    return (
-      <div style={{ margin: '0 32px', padding: '20px 0', color: 'rgba(245,241,232,0.4)', fontSize: 13, fontFamily: 'Inter, sans-serif', fontStyle: 'italic' }}>
-        Nessun altro utente online al momento
-      </div>
-    );
-  }
-
+  if (!users.length) return <div style={{ margin: '0 32px', padding: '20px 0', color: 'rgba(245,241,232,0.4)', fontSize: 13, fontFamily: 'Inter, sans-serif', fontStyle: 'italic' }}>Nessun altro utente online al momento</div>;
   return (
     <div style={{ margin: '0 32px', display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-      {users.map(u => (
+      {users.map((u) => (
         <div key={u.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: 60 }}>
           <div style={{ position: 'relative' }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: '50%',
-              background: 'linear-gradient(135deg, rgba(212,175,55,0.3), rgba(212,175,55,0.08))',
-              border: '1px solid rgba(212,175,55,0.3)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Playfair Display, serif', fontSize: 16, color: '#D4AF37', fontWeight: 600,
-            }}>
-              {u.avatar_initials}
-            </div>
-            <div style={{
-              position: 'absolute', bottom: 1, right: 1,
-              width: 10, height: 10, borderRadius: '50%',
-              background: '#28c840', border: '2px solid #0a0a0a',
-              animation: 'pulseDot 2s ease-in-out infinite',
-            }} />
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(212,175,55,0.3), rgba(212,175,55,0.08))', border: '1px solid rgba(212,175,55,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Playfair Display, serif', fontSize: 16, color: '#D4AF37', fontWeight: 600 }}>{u.avatar_initials}</div>
+            <div style={{ position: 'absolute', bottom: 1, right: 1, width: 10, height: 10, borderRadius: '50%', background: '#28c840', border: '2px solid #0a0a0a', animation: 'pulseDot 2s ease-in-out infinite' }} />
           </div>
-          <div style={{
-            fontSize: 10, color: 'rgba(245,241,232,0.7)', fontFamily: 'Inter, sans-serif',
-            textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden',
-            textOverflow: 'ellipsis', maxWidth: 60,
-          }}>
-            {u.username}
-          </div>
+          <div style={{ fontSize: 10, color: 'rgba(245,241,232,0.7)', fontFamily: 'Inter, sans-serif', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 60 }}>{u.username}</div>
         </div>
       ))}
     </div>
   );
 }
 
-// ————— Live Tables —————
-function LiveTablesSection({ tables, loading, onOpenCreate }) {
-  const navigate = useNavigate();
-
-  if (loading) {
-    return (
-      <div style={{ margin: '0 32px', border: '1px solid rgba(212,175,55,0.12)', padding: 8 }}>
-        <SkeletonRow /><SkeletonRow /><SkeletonRow />
-      </div>
-    );
-  }
-
-  if (!tables.length) {
-    return (
-      <div style={{ margin: '0 32px', border: '1px solid rgba(212,175,55,0.12)', padding: '48px 32px', textAlign: 'center' }}>
-        <div style={{ fontSize: 52, color: '#D4AF37', marginBottom: 16, fontFamily: 'serif' }}>♠</div>
-        <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#F5F1E8', marginBottom: 8 }}>Nessun tavolo aperto</div>
-        <button onClick={onOpenCreate} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: '#D4AF37', fontFamily: 'Inter, sans-serif', fontSize: 13,
-          textDecoration: 'underline', textDecorationColor: 'rgba(212,175,55,0.4)',
-        }}>Sii il primo</button>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ margin: '0 32px', border: '1px solid rgba(212,175,55,0.12)' }}>
-      <div style={{
-        display: 'grid', gridTemplateColumns: '18px 1.6fr 0.8fr 1fr 1fr 1fr 1fr 1fr',
-        padding: '11px 18px', background: 'rgba(212,175,55,0.04)',
-        borderBottom: '1px solid rgba(212,175,55,0.12)',
-        fontSize: 9.5, letterSpacing: '0.2em', fontWeight: 600, color: 'rgba(245,241,232,0.5)',
-      }}>
-        <div></div><div>TAVOLO</div><div>TIPO</div><div>LIMITI</div><div>GIOCATORI</div><div>VELOCITÀ</div><div>STATO</div><div></div>
-      </div>
-      {tables.map((t, i) => {
-        const full = t.players_seated >= t.max_seats;
-        const stakes = `${t.small_blind}/${t.big_blind}`;
-        const typeLabel = 'Cash';
-        return (
-          <div key={t.id} style={{
-            display: 'grid', gridTemplateColumns: '18px 1.6fr 0.8fr 1fr 1fr 1fr 1fr 1fr',
-            padding: '13px 18px', alignItems: 'center',
-            borderBottom: i < tables.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
-            transition: 'background 0.15s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(212,175,55,0.03)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            {/* Status dot */}
-            <span style={{
-              display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
-              background: t.status === 'running' ? '#28c840' : 'rgba(245,241,232,0.25)',
-              animation: t.status === 'running' ? 'pulseDot 2s ease-in-out infinite' : 'none',
-            }} />
-            {/* Name */}
-            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, color: '#F5F1E8' }}>{t.name}</div>
-            {/* Type */}
-            <div><Pill>{typeLabel}</Pill></div>
-            {/* Stakes */}
-            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#F5F1E8' }}>{stakes}</div>
-            {/* Players */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#F5F1E8' }}>
-                {t.players_seated}<span style={{ color: 'rgba(245,241,232,0.4)' }}>/{t.max_seats}</span>
-              </div>
-              <div style={{ height: 2, background: 'rgba(245,241,232,0.1)', width: 60 }}>
-                <div style={{ height: '100%', width: `${(t.players_seated / t.max_seats) * 100}%`, background: '#D4AF37' }} />
-              </div>
-            </div>
-            {/* Speed */}
-            <SpeedBadge speed={t.speed} />
-            {/* Status label */}
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: t.status === 'running' ? '#28c840' : 'rgba(245,241,232,0.5)' }}>
-              {t.status === 'running' ? '● In gioco' : '○ In attesa'}
-            </div>
-            {/* CTA */}
-            <div style={{ textAlign: 'right' }}>
-              {full
-                ? <GoldButton size="sm" variant="ghost" onClick={() => navigate(`/table/${t.id}`)}>Osserva</GoldButton>
-                : <GoldButton size="sm" onClick={() => navigate(`/table/${t.id}`)}>Siediti →</GoldButton>
-              }
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ————— Cash table list (dedicated view) —————
 function CashTable({ tables, loading, onOpenCreate }) {
   const navigate = useNavigate();
   if (loading) return <div style={{ margin: '0 32px', border: '1px solid rgba(212,175,55,0.12)', padding: 8 }}><SkeletonRow /><SkeletonRow /><SkeletonRow /></div>;
   if (!tables.length) return (
     <div style={{ margin: '0 32px', border: '1px solid rgba(212,175,55,0.12)', padding: '48px 32px', textAlign: 'center' }}>
       <div style={{ fontSize: 52, color: '#D4AF37', marginBottom: 16, fontFamily: 'serif' }}>♠</div>
-      <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#F5F1E8', marginBottom: 8 }}>Nessun tavolo aperto</div>
+      <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#F5F1E8', marginBottom: 8 }}>Nessun tavolo cash aperto</div>
       <button onClick={onOpenCreate} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4AF37', fontFamily: 'Inter, sans-serif', fontSize: 13, textDecoration: 'underline' }}>Sii il primo</button>
     </div>
   );
@@ -264,9 +171,7 @@ function CashTable({ tables, loading, onOpenCreate }) {
       {tables.map((t, i) => {
         const full = t.players_seated >= t.max_seats;
         return (
-          <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '18px 1.5fr 1fr 1fr 1fr 1fr 1fr', padding: '13px 18px', alignItems: 'center', borderBottom: i < tables.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none', transition: 'background 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(212,175,55,0.03)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+          <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '18px 1.5fr 1fr 1fr 1fr 1fr 1fr', padding: '13px 18px', alignItems: 'center', borderBottom: i < tables.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none' }}>
             <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: t.status === 'running' ? '#28c840' : 'rgba(245,241,232,0.25)', animation: t.status === 'running' ? 'pulseDot 2s ease-in-out infinite' : 'none' }} />
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, color: '#F5F1E8' }}>{t.name}</div>
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#F5F1E8' }}>{t.small_blind}/{t.big_blind}</div>
@@ -277,8 +182,7 @@ function CashTable({ tables, loading, onOpenCreate }) {
             <SpeedBadge speed={t.speed} />
             <div style={{ fontSize: 10.5, color: t.status === 'running' ? '#28c840' : 'rgba(245,241,232,0.5)' }}>{t.status === 'running' ? '● In gioco' : '○ In attesa'}</div>
             <div style={{ textAlign: 'right' }}>
-              {full ? <GoldButton size="sm" variant="ghost" onClick={() => navigate(`/table/${t.id}`)}>Osserva</GoldButton>
-                     : <GoldButton size="sm" onClick={() => navigate(`/table/${t.id}`)}>Siediti →</GoldButton>}
+              {full ? <GoldButton size="sm" variant="ghost" onClick={() => navigate(`/table/${t.id}`)}>Osserva</GoldButton> : <GoldButton size="sm" onClick={() => navigate(`/table/${t.id}`)}>Siediti →</GoldButton>}
             </div>
           </div>
         );
@@ -287,54 +191,199 @@ function CashTable({ tables, loading, onOpenCreate }) {
   );
 }
 
-// ————— Main Lobby —————
-export default function Lobby({ view = 'lobby' }) {
-  const { tables, loading: tablesLoading } = useTables();
-  const { users: onlineUsers, loading: onlineLoading } = useOnlineUsers();
-  const [createModal, setCreateModal] = useState(null);
+function SitGoSection({ tournaments, loading, error, busyMap, isRegistered, onRegisterToggle, onOpenCreate }) {
+  const navigate = useNavigate();
+  const statusMeta = {
+    registering: { label: 'In registrazione', color: 'rgba(212,175,55,0.9)' },
+    waiting: { label: 'In registrazione', color: 'rgba(212,175,55,0.9)' },
+    running: { label: 'In corso', color: '#28c840' },
+    finished: { label: 'Concluso', color: 'rgba(245,241,232,0.45)' },
+  };
 
-  const modal = createModal && (
-    <CreateTableModal isOpen onClose={() => setCreateModal(null)} defaultType={createModal === 'table' ? undefined : createModal} />
-  );
-
-  if (view === 'cash') return (
-    <div style={{ paddingBottom: 40 }}>
-      <TopBar subtitle={`CASH GAME · ${tables.length} TAVOLI`} title="Cash Game"
-        actions={<GoldButton variant="ghost" size="sm" onClick={() => setCreateModal('cash')}>＋ Tavolo</GoldButton>} />
-      <div style={{
-        padding: '10px 28px 20px',
-        fontFamily: 'Inter, sans-serif', fontSize: 13,
-        color: 'rgba(245,241,232,0.45)', lineHeight: 1.6,
-        borderBottom: '1px solid rgba(212,175,55,0.08)',
-      }}>
-        Gioca quando vuoi, siediti e alzati liberamente. Le chip sono reali ma il tuo bankroll rimane sempre tuo — nessun buy-in fisso, nessun vincolo di tempo.
-      </div>
-      <CashTable tables={tables} loading={tablesLoading} onOpenCreate={() => setCreateModal('cash')} />
-      {modal}
+  if (loading) return <div style={{ margin: '0 32px', border: '1px solid rgba(212,175,55,0.12)', padding: 8 }}><SkeletonRow /><SkeletonRow /></div>;
+  if (error) return <div style={{ margin: '0 32px', padding: '14px 16px', border: '1px solid rgba(200,60,60,0.35)', color: 'rgba(235,120,120,0.92)', fontFamily: 'Inter, sans-serif', fontSize: 12 }}>{error}</div>;
+  if (!tournaments.length) return (
+    <div style={{ margin: '0 32px', border: '1px solid rgba(212,175,55,0.12)', padding: '36px 28px', textAlign: 'center' }}>
+      <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#F5F1E8', marginBottom: 8 }}>Nessun Sit & Go disponibile</div>
+      <button onClick={onOpenCreate} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4AF37', fontFamily: 'Inter, sans-serif', fontSize: 13, textDecoration: 'underline' }}>Crea il primo torneo</button>
     </div>
   );
 
-  // ————— Default: overview —————
+  return (
+    <div style={{ margin: '0 32px', border: '1px solid rgba(212,175,55,0.12)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1fr 0.8fr 1fr 1.4fr', padding: '11px 18px', background: 'rgba(212,175,55,0.04)', borderBottom: '1px solid rgba(212,175,55,0.12)', fontSize: 9.5, letterSpacing: '0.2em', fontWeight: 600, color: 'rgba(245,241,232,0.5)' }}>
+        <div>TORNEO</div><div>STATO</div><div>ISCRITTI</div><div>VEL.</div><div>BUY-IN</div><div style={{ textAlign: 'right' }}>AZIONI</div>
+      </div>
+      {tournaments.map((t, i) => {
+        const registered = isRegistered(t);
+        const canEnterTable = t.status === 'running' && t.tableId;
+        const canRegister = t.status === 'registering' || t.status === 'waiting';
+        const busy = !!busyMap[t.id];
+        const full = t.nRegistered >= t.maxSeats;
+        const registerDisabled = busy || (!registered && full);
+        const sMeta = statusMeta[t.status] ?? { label: t.status, color: 'rgba(245,241,232,0.55)' };
+        return (
+          <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1fr 0.8fr 1fr 1.4fr', padding: '13px 18px', alignItems: 'center', borderBottom: i < tournaments.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none' }}>
+            <div>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, color: '#F5F1E8' }}>{t.name}</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: 'rgba(245,241,232,0.45)', marginTop: 2 }}>
+                {t.creatorUsername ? `Creato da ${t.creatorUsername}` : 'Sit & Go'} · min {t.minPlayers}
+              </div>
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: sMeta.color }}>{sMeta.label}</div>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#F5F1E8' }}>
+              {t.nRegistered}<span style={{ color: 'rgba(245,241,232,0.4)' }}>/{t.maxSeats || '—'}</span>{registered ? <span style={{ color: '#D4AF37' }}> · Tu</span> : ''}
+            </div>
+            <SpeedBadge speed={t.speed} />
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#D4AF37' }}>
+              {(t.startingChips || 0).toLocaleString('it-IT')}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              {canEnterTable && <GoldButton size="sm" onClick={() => navigate(`/table/${t.tableId}`)}>Entra</GoldButton>}
+              {canRegister && (
+                <GoldButton
+                  size="sm"
+                  variant={registered ? 'ghost' : 'solid'}
+                  onClick={() => !registerDisabled && onRegisterToggle(t, registered)}
+                  style={registerDisabled ? { opacity: 0.45, cursor: 'not-allowed' } : {}}
+                >
+                  {busy ? '...' : registered ? 'Ritirati' : (full ? 'Pieno' : 'Iscriviti')}
+                </GoldButton>
+              )}
+              {!canEnterTable && !canRegister && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: 'rgba(245,241,232,0.45)', letterSpacing: '0.08em' }}>Concluso</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function Lobby({ view = 'lobby' }) {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { tables, loading: tablesLoading } = useTables();
+  const { users: onlineUsers, loading: onlineLoading } = useOnlineUsers();
+  const { sitgos, loading: sitgoLoading, error: sitgoError, refresh: refreshSitGos } = useSitGos();
+  const [createModal, setCreateModal] = useState(null);
+  const [busyMap, setBusyMap] = useState({});
+  const [registrationState, setRegistrationState] = useState({});
+  const [sitgoActionError, setSitgoActionError] = useState('');
+
+  const cashTables = useMemo(() => tables.filter((t) => String(t.table_type).toLowerCase() !== 'sitgo'), [tables]);
+
+  useEffect(() => {
+    if (!user?.id || !sitgos.length) return;
+    let active = true;
+    Promise.all(
+      sitgos.map((t) =>
+        tablesApi.getSitGo(t.id)
+          .then((res) => ({ id: t.id, registrations: res.data?.registrations ?? [] }))
+          .catch(() => null)
+      )
+    ).then((rows) => {
+      if (!active) return;
+      const next = {};
+      rows.filter(Boolean).forEach((row) => {
+        next[row.id] = row.registrations.some((r) => String(r.user_id) === String(user.id));
+      });
+      if (Object.keys(next).length > 0) {
+        setRegistrationState((prev) => ({ ...prev, ...next }));
+      }
+    });
+    return () => { active = false; };
+  }, [sitgos, user?.id]);
+
+  const isRegistered = useCallback((t) => {
+    const explicit = t.isRegistered;
+    if (explicit != null) return !!explicit;
+    if (registrationState[t.id] != null) return !!registrationState[t.id];
+    return false;
+  }, [registrationState]);
+
+  const handleRegisterToggle = useCallback(async (t, registered) => {
+    if (!t?.id) return;
+    setSitgoActionError('');
+    setBusyMap((prev) => ({ ...prev, [t.id]: true }));
+    try {
+      if (registered) {
+        await tablesApi.unregisterSitGo(t.id);
+        setRegistrationState((prev) => ({ ...prev, [t.id]: false }));
+      } else {
+        await tablesApi.registerSitGo(t.id);
+        setRegistrationState((prev) => ({ ...prev, [t.id]: true }));
+      }
+      await refreshSitGos();
+    } catch (err) {
+      const message = err?.response?.data?.detail ?? 'Operazione non riuscita';
+      setSitgoActionError(message);
+    } finally {
+      setBusyMap((prev) => ({ ...prev, [t.id]: false }));
+    }
+  }, [refreshSitGos]);
+
+  const modal = createModal && (
+    <CreateTableModal
+      isOpen
+      onClose={() => setCreateModal(null)}
+      defaultType={createModal === 'table' ? 'cash' : createModal}
+    />
+  );
+
+  if (view === 'cash') {
+    return (
+      <div style={{ paddingBottom: 40 }}>
+        <TopBar subtitle={`CASH GAME · ${cashTables.length} TAVOLI`} title="Cash Game" actions={<GoldButton variant="ghost" size="sm" onClick={() => setCreateModal('cash')}>＋ Tavolo</GoldButton>} />
+        <div style={{ padding: '10px 28px 20px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'rgba(245,241,232,0.45)', lineHeight: 1.6, borderBottom: '1px solid rgba(212,175,55,0.08)' }}>
+          Gioca quando vuoi, siediti e alzati liberamente. Nessun buy-in fisso, nessun vincolo di tempo.
+        </div>
+        <CashTable tables={cashTables} loading={tablesLoading} onOpenCreate={() => setCreateModal('cash')} />
+        {modal}
+      </div>
+    );
+  }
+
+  if (view === 'sitgo') {
+    return (
+      <div style={{ paddingBottom: 40 }}>
+        <TopBar subtitle={`SIT & GO · ${sitgos.length} TORNEI`} title="Sit & Go" actions={<GoldButton variant="ghost" size="sm" onClick={() => setCreateModal('sitgo')}>＋ Torneo</GoldButton>} />
+        <div style={{ padding: '10px 28px 20px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'rgba(245,241,232,0.45)', lineHeight: 1.6, borderBottom: '1px solid rgba(212,175,55,0.08)' }}>
+          Iscriviti, aspetta che il tavolo sia completo e gioca fino all'ultimo chip.
+        </div>
+        <SitGoSection
+          tournaments={sitgos}
+          loading={sitgoLoading}
+          error={sitgoActionError || sitgoError}
+          busyMap={busyMap}
+          isRegistered={isRegistered}
+          onRegisterToggle={handleRegisterToggle}
+          onOpenCreate={() => setCreateModal('sitgo')}
+        />
+        {modal}
+      </div>
+    );
+  }
 
   return (
     <div style={{ paddingBottom: 40 }}>
-      <TopBar
-        subtitle={`BENTORNATO · ${new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}`}
-        title="Lobby"
-      />
+      <TopBar subtitle={`BENTORNATO ${user?.display_name ? `· ${String(user.display_name).toUpperCase()}` : ''}`} title="Lobby" />
 
-      <SectionHeading
-        overline={`ONLINE ORA · ${onlineUsers.length} ${onlineUsers.length === 1 ? 'GIOCATORE' : 'GIOCATORI'}`}
-        title="Utenti online"
-      />
+      <SectionHeading overline={`ONLINE ORA · ${onlineUsers.length} ${onlineUsers.length === 1 ? 'GIOCATORE' : 'GIOCATORI'}`} title="Utenti online" />
       <OnlineUsersSection users={onlineUsers} loading={onlineLoading} />
 
-      <SectionHeading
-        overline={`TAVOLI LIVE · ${tables.length} ATTIVI`}
-        title="Tavoli aperti"
-        action={<GoldButton variant="ghost" size="sm" onClick={() => setCreateModal('table')}>＋ Tavolo</GoldButton>}
+      <SectionHeading overline={`CASH GAME · ${cashTables.length} TAVOLI`} title="Tavoli Cash" action={<GoldButton variant="ghost" size="sm" onClick={() => navigate('/lobby/cash')}>Vedi tutti</GoldButton>} />
+      <CashTable tables={cashTables} loading={tablesLoading} onOpenCreate={() => setCreateModal('cash')} />
+
+      <SectionHeading overline={`SIT & GO · ${sitgos.length} TORNEI`} title="Tornei Sit & Go" action={<GoldButton variant="ghost" size="sm" onClick={() => navigate('/lobby/sitgo')}>Vedi tutti</GoldButton>} />
+      <SitGoSection
+        tournaments={sitgos}
+        loading={sitgoLoading}
+        error={sitgoActionError || sitgoError}
+        busyMap={busyMap}
+        isRegistered={isRegistered}
+        onRegisterToggle={handleRegisterToggle}
+        onOpenCreate={() => setCreateModal('sitgo')}
       />
-      <LiveTablesSection tables={tables} loading={tablesLoading} onOpenCreate={() => setCreateModal('table')} />
 
       {modal}
     </div>

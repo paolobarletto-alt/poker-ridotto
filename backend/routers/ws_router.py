@@ -17,7 +17,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
@@ -31,9 +31,9 @@ from auth import get_current_user
 from config import settings
 from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
-from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, PokerTable, TableSeat, User
+from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, PokerTable, SitGoTournament, TableSeat, User
 from poker_engine import AzioneGioco, FaseGioco, StatoSeat
-# sitgo handling removed (feature disabled)
+from routers.sitgo_router import handle_sitgo_hand_end
 
 logger = logging.getLogger("ridotto.ws_router")
 
@@ -485,7 +485,7 @@ async def _persist_hand_end(
     db.add(hand_record)
     await db.flush()  # per avere hand_record.id
 
-    # Aggiorna stack nei TableSeat e chips_balance utenti
+    # Aggiorna stack nei TableSeat e chips_balance utenti (solo cash game)
     seats_result = await db.execute(
         select(TableSeat).where(TableSeat.table_id == table.id)
     )
@@ -505,12 +505,12 @@ async def _persist_hand_end(
         diff = new_stack - old_stack
         db_seat.stack = new_stack
 
-        # Aggiorna chips_balance utente
+        # Aggiorna chips_balance utente (solo cash game)
         user_res = await db.execute(select(User).where(User.id == uuid.UUID(pid)))
         u = user_res.scalar_one_or_none()
         if u is None:
             continue
-        if diff != 0:
+        if diff != 0 and table.table_type == "cash":
             u.chips_balance += diff
             reason = "hand_win" if diff > 0 else "hand_loss"
             db.add(ChipsLedger(
@@ -633,6 +633,31 @@ async def websocket_table(
 
     game_manager.add_connection(table_id, user_id, websocket)
 
+    tournament_payload = None
+    if db_table.table_type == "sitgo":
+        async with AsyncSessionLocal() as db:
+            t_result = await db.execute(
+                select(SitGoTournament).where(SitGoTournament.table_id == db_table.id)
+            )
+            tournament = t_result.scalar_one_or_none()
+        if tournament:
+            level_ends_at = None
+            schedule = tournament.blind_schedule or []
+            level_idx = max(tournament.current_blind_level - 1, 0)
+            if tournament.level_started_at and level_idx < len(schedule):
+                duration = int(schedule[level_idx].get("duration_seconds", 0) or 0)
+                if duration > 0:
+                    level_ends_at = tournament.level_started_at + timedelta(seconds=duration)
+
+            tournament_payload = {
+                "id": str(tournament.id),
+                "name": tournament.name,
+                "speed": tournament.speed,
+                "current_blind_level": tournament.current_blind_level,
+                "blind_schedule": schedule,
+                "level_ends_at": level_ends_at.isoformat() if level_ends_at else None,
+            }
+
     # ── 4. Messaggio di benvenuto ──────────────────────────────────────────
     await websocket.send_json({
         "type": "welcome",
@@ -655,6 +680,7 @@ async def websocket_table(
             "display_name": current_user.display_name,
             "chips_balance": current_user.chips_balance,
         },
+        "tournament": tournament_payload,
     })
 
     # Invia subito anche un messaggio "state" separato: garantisce che il frontend
@@ -767,6 +793,9 @@ async def _handle_join_seat(
     # Già seduto?
     if game_manager.is_seated(table_id, user_id):
         await ws.send_json({"type": "error", "message": "Sei già seduto a questo tavolo"})
+        return
+    if db_table.table_type == "sitgo":
+        await ws.send_json({"type": "error", "message": "Nei Sit&Go i posti sono gestiti automaticamente dal torneo"})
         return
 
     seat_number = msg.get("seat")
@@ -889,6 +918,9 @@ async def _handle_leave_seat(
     if not game_manager.is_seated(table_id, user_id):
         await ws.send_json({"type": "error", "message": "Non sei seduto a questo tavolo"})
         return
+    if db_table.table_type == "sitgo":
+        await ws.send_json({"type": "error", "message": "Nel Sit&Go non puoi lasciare il posto durante il torneo"})
+        return
 
     seat_number = game_manager.seat_for_user(table_id, user_id)
 
@@ -961,7 +993,8 @@ async def _handle_leave_seat(
             db_table_fresh = tbl_res.scalar_one_or_none()
             if db_table_fresh:
                 await _persist_hand_end(db, db_table_fresh, game, game.num_mano)
-                # sitgo handling removed
+                if db_table_fresh.table_type == "sitgo":
+                    await handle_sitgo_hand_end(table_id, db)
 
     # Torna a "waiting" se non ci sono abbastanza giocatori
     active = game.players_active_count()
@@ -992,6 +1025,9 @@ async def _handle_rebuy(
     user_id = str(user.id)
     if not game_manager.is_seated(table_id, user_id):
         await ws.send_json({"type": "error", "message": "Non sei seduto a questo tavolo"})
+        return
+    if db_table.table_type == "sitgo":
+        await ws.send_json({"type": "error", "message": "Nel Sit&Go il rebuy non è consentito"})
         return
 
     amount = int(msg.get("amount", 0))
@@ -1157,7 +1193,8 @@ async def _post_action_advance(
             tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
             db_table_fresh = tbl_res.scalar_one()
             await _persist_hand_end(db, db_table_fresh, game, game.num_mano)
-            # sitgo handling removed
+            if db_table_fresh.table_type == "sitgo":
+                await handle_sitgo_hand_end(table_id, db)
 
         await _handle_busted_players(table_id, game, db_table.id)
 
@@ -1252,7 +1289,8 @@ async def _run_out_cards(table_id: str, db_table: Any, num_mano: int) -> None:
         tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
         db_table_fresh = tbl_res.scalar_one()
         await _persist_hand_end(db, db_table_fresh, game, game.num_mano)
-        # sitgo handling removed
+        if db_table_fresh.table_type == "sitgo":
+            await handle_sitgo_hand_end(table_id, db)
 
     await _handle_busted_players(table_id, game, db_table.id)
 

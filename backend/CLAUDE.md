@@ -30,7 +30,7 @@ Python 3.12 · FastAPI · SQLAlchemy 2.0 async · Pydantic v2 · Supabase Postgr
 ### ❌ DA CREARE
 | File | Cosa deve fare |
 |---|---|
-| `routers/sitgo_router.py` | CRUD sit&go, register/unregister, start tournament, blind timer, eliminazioni |
+| `routers/sitgo_router.py` | CRUD sit&go, register/unregister, auto-start, blind timer, payout finale |
 | `scheduler.py` | APScheduler daily_chips_refill (ogni giorno alle 06:00 Europe/Rome) |
 
 ## Convenzioni obbligatorie
@@ -86,7 +86,7 @@ max_seats: int    # massimo posti al tavolo
 
 ### SitGoTournament
 ```python
-status: "registering" | "running" | "finished"
+status: "waiting" | "running" | "finished"
 # Il torneo parte quando n_registered == max_seats (non min_players)
 # min_players serve solo per il gioco durante il torneo
 ```
@@ -95,7 +95,7 @@ status: "registering" | "running" | "finished"
 ```python
 # HandAction.phase: "preflop" | "flop" | "turn" | "river"
 # HandAction.action: "fold" | "check" | "call" | "raise" | "allin"
-# ChipsLedger.reason: "registration_bonus" | "daily_refill" | "hand_win" | "hand_loss" | "sitgo_win" | "sitgo_loss" | "admin_add"
+# ChipsLedger.reason: "registration_bonus" | "daily_refill" | "hand_win" | "hand_loss" | "sitgo_buyin" | "sitgo_payout" | "sitgo_refund" | "admin_add"
 ```
 
 ## Speed → valori
