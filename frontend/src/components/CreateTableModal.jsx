@@ -109,6 +109,12 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
   }, [maxSeats, minPlayers, maxSeatCap]);
 
   useEffect(() => {
+    if (type === 'sitgo' && minPlayers !== maxSeats) {
+      setMinPlayers(maxSeats);
+    }
+  }, [type, minPlayers, maxSeats]);
+
+  useEffect(() => {
     if (minBuyin < bb * 10) setMinBuyin(bb * 10);
   }, [bb, minBuyin]);
 
@@ -117,12 +123,13 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
   const errors = {};
   if (name.trim().length < 3) errors.name = 'Min 3 caratteri';
   if (name.trim().length > 50) errors.name = 'Max 50 caratteri';
-  if (minPlayers < 2 || minPlayers > maxSeatCap) errors.minPlayers = `Tra 2 e ${maxSeatCap}`;
-  if (maxSeats < minPlayers || maxSeats > maxSeatCap) errors.maxSeats = `Tra ${minPlayers} e ${maxSeatCap}`;
   if (type === 'cash') {
+    if (minPlayers < 2 || minPlayers > maxSeatCap) errors.minPlayers = `Tra 2 e ${maxSeatCap}`;
+    if (maxSeats < minPlayers || maxSeats > maxSeatCap) errors.maxSeats = `Tra ${minPlayers} e ${maxSeatCap}`;
     if (minBuyin < bb * 10) errors.minBuyin = `Min buy-in deve essere ≥ ${bb * 10}`;
     if (!noMaxBuyin && maxBuyin < minBuyin) errors.maxBuyin = 'Max buy-in deve essere ≥ min buy-in';
   } else {
+    if (maxSeats < 2 || maxSeats > 8) errors.maxSeats = 'Tra 2 e 8';
     if (startChips < 1000) errors.startChips = 'Minimo 1000 chips';
     if (sitgoBuyIn < 100) errors.sitgoBuyIn = 'Minimo 100 chips';
   }
@@ -138,7 +145,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
 
     const basePayload = {
       name: name.trim(),
-      min_players: minPlayers,
+      min_players: type === 'sitgo' ? maxSeats : minPlayers,
       max_seats: maxSeats,
       speed,
     };
@@ -241,22 +248,32 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
               />
               {visibleErrors.name && <div style={css.errorMsg}>{visibleErrors.name}</div>}
             </div>
-            <div style={css.row2}>
-              <div>
-                <label style={css.label}>Giocatori minimi</label>
-                <select value={minPlayers} onChange={(e) => setMinPlayers(Number(e.target.value))} style={{ ...css.select, ...(visibleErrors.minPlayers ? css.inputError : {}) }}>
-                  {Array.from({ length: maxSeatCap - 1 }, (_, i) => i + 2).map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-                {visibleErrors.minPlayers && <div style={css.errorMsg}>{visibleErrors.minPlayers}</div>}
+            {type === 'cash' ? (
+              <div style={css.row2}>
+                <div>
+                  <label style={css.label}>Giocatori minimi</label>
+                  <select value={minPlayers} onChange={(e) => setMinPlayers(Number(e.target.value))} style={{ ...css.select, ...(visibleErrors.minPlayers ? css.inputError : {}) }}>
+                    {Array.from({ length: maxSeatCap - 1 }, (_, i) => i + 2).map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  {visibleErrors.minPlayers && <div style={css.errorMsg}>{visibleErrors.minPlayers}</div>}
+                </div>
+                <div>
+                  <label style={css.label}>Posti massimi</label>
+                  <select value={maxSeats} onChange={(e) => setMaxSeats(Number(e.target.value))} style={{ ...css.select, ...(visibleErrors.maxSeats ? css.inputError : {}) }}>
+                    {Array.from({ length: maxSeatCap - minPlayers + 1 }, (_, i) => i + minPlayers).map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  {visibleErrors.maxSeats && <div style={css.errorMsg}>{visibleErrors.maxSeats}</div>}
+                </div>
               </div>
+            ) : (
               <div>
-                <label style={css.label}>Posti massimi</label>
+                <label style={css.label}>Numero partecipanti</label>
                 <select value={maxSeats} onChange={(e) => setMaxSeats(Number(e.target.value))} style={{ ...css.select, ...(visibleErrors.maxSeats ? css.inputError : {}) }}>
-                  {Array.from({ length: maxSeatCap - minPlayers + 1 }, (_, i) => i + minPlayers).map(n => <option key={n} value={n}>{n}</option>)}
+                  {Array.from({ length: 7 }, (_, i) => i + 2).map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
                 {visibleErrors.maxSeats && <div style={css.errorMsg}>{visibleErrors.maxSeats}</div>}
               </div>
-            </div>
+            )}
           </div>
 
           <div>

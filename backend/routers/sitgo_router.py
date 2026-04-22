@@ -153,11 +153,12 @@ async def create_sitgo(
     db: AsyncSession = Depends(get_db),
 ):
     schedule = BLIND_SCHEDULES.get(payload.speed, BLIND_SCHEDULES["normal"])
-    payout_structure = _payout_structure_for_players(payload.max_seats)
+    target_players = payload.max_seats
+    payout_structure = _payout_structure_for_players(target_players)
     tournament = SitGoTournament(
         name=payload.name,
-        min_players=payload.min_players,
-        max_seats=payload.max_seats,
+        min_players=target_players,
+        max_seats=target_players,
         starting_chips=payload.starting_chips,
         buy_in=payload.buy_in,
         speed=payload.speed,
@@ -173,7 +174,7 @@ async def create_sitgo(
     await db.commit()
     await db.refresh(tournament)
 
-    if n_registered == tournament.max_seats:
+    if n_registered >= tournament.max_seats:
         asyncio.create_task(_start_tournament(tournament.id))
 
     return await _build_response(tournament, db)
@@ -226,7 +227,7 @@ async def register_sitgo(
     n_registered = await _register_player(db, tournament, current_user)
     await db.commit()
 
-    if n_registered == tournament.max_seats:
+    if n_registered >= tournament.max_seats:
         asyncio.create_task(_start_tournament(tournament_id))
 
     return {"message": "Iscrizione completata", "n_registered": n_registered, "max_seats": tournament.max_seats}
@@ -307,7 +308,7 @@ async def _start_tournament(tournament_id: uuid.UUID):
                 .order_by(SitGoRegistration.registered_at)
             )
             registrations = regs_result.scalars().all()
-            if len(registrations) != tournament.max_seats:
+            if len(registrations) < tournament.max_seats:
                 return
 
             schedule = tournament.blind_schedule
