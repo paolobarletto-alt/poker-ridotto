@@ -35,9 +35,45 @@ export default function RacePage() {
               <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#F5F1E8' }}>Classifica profitti</div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setPeriod('weekly')} style={{ padding: '8px 12px', background: period === 'weekly' ? '#D4AF37' : 'transparent', border: '1px solid rgba(212,175,55,0.12)', cursor: 'pointer' }}>Settimanale</button>
-              <button onClick={() => setPeriod('monthly')} style={{ padding: '8px 12px', background: period === 'monthly' ? '#D4AF37' : 'transparent', border: '1px solid rgba(212,175,55,0.12)', cursor: 'pointer' }}>Mensile</button>
-              <button onClick={() => setPeriod('annual')} style={{ padding: '8px 12px', background: period === 'annual' ? '#D4AF37' : 'transparent', border: '1px solid rgba(212,175,55,0.12)', cursor: 'pointer' }}>Annuale</button>
+              <button
+                onClick={() => setPeriod('weekly')}
+                style={{
+                  padding: '8px 12px',
+                  background: period === 'weekly' ? '#D4AF37' : 'transparent',
+                  color: period === 'weekly' ? '#0a0a0a' : '#F5F1E8',
+                  border: '1px solid rgba(212,175,55,0.35)',
+                  fontFamily: 'Inter, sans-serif',
+                  cursor: 'pointer',
+                }}
+              >
+                Settimanale
+              </button>
+              <button
+                onClick={() => setPeriod('monthly')}
+                style={{
+                  padding: '8px 12px',
+                  background: period === 'monthly' ? '#D4AF37' : 'transparent',
+                  color: period === 'monthly' ? '#0a0a0a' : '#F5F1E8',
+                  border: '1px solid rgba(212,175,55,0.35)',
+                  fontFamily: 'Inter, sans-serif',
+                  cursor: 'pointer',
+                }}
+              >
+                Mensile
+              </button>
+              <button
+                onClick={() => setPeriod('annual')}
+                style={{
+                  padding: '8px 12px',
+                  background: period === 'annual' ? '#D4AF37' : 'transparent',
+                  color: period === 'annual' ? '#0a0a0a' : '#F5F1E8',
+                  border: '1px solid rgba(212,175,55,0.35)',
+                  fontFamily: 'Inter, sans-serif',
+                  cursor: 'pointer',
+                }}
+              >
+                Annuale
+              </button>
             </div>
           </div>
 

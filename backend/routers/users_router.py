@@ -312,10 +312,16 @@ async def race_leaderboard(period: str = 'weekly', db: AsyncSession = Depends(ge
     else:
         raise HTTPException(status_code=400, detail='Invalid period')
 
-    # Aggregate profit per user from ChipsLedger within the period
+    # Profitto = vincite - perdite di gioco (esclude ricariche admin e altri movimenti)
     profit_subq = (
-        select(ChipsLedger.user_id.label('user_id'), func.coalesce(func.sum(ChipsLedger.amount), 0).label('profit'))
-        .where(ChipsLedger.created_at >= start)
+        select(
+            ChipsLedger.user_id.label('user_id'),
+            func.coalesce(func.sum(ChipsLedger.amount), 0).label('profit')
+        )
+        .where(
+            ChipsLedger.created_at >= start,
+            ChipsLedger.reason.in_(["hand_win", "hand_loss", "sitgo_win", "sitgo_loss"]),
+        )
         .group_by(ChipsLedger.user_id)
         .subquery()
     )
