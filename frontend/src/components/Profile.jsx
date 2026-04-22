@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { GoldButton } from './Shell';
 // ————— Skeleton —————
 const shimmerStyle = (() => {
   if (typeof document !== 'undefined' && !document.getElementById('profile-shimmer')) {
@@ -115,7 +117,8 @@ function StatTile({ label, value, sub, accent, wide, loading, tooltip }) {
 
 // ————— Profile —————
 export default function Profile() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
+  const navigate = useNavigate();
 
   const [statsData, setStatsData] = useState({});
   const [gameHistory, setGameHistory] = useState([]);
@@ -234,6 +237,12 @@ export default function Profile() {
               @{user?.username}
             </div>
           </div>
+        </div>
+
+        <div>
+          <GoldButton variant="ghost" size="sm" onClick={() => { logout(); navigate('/'); }}>
+            Logout
+          </GoldButton>
         </div>
       </div>
 
