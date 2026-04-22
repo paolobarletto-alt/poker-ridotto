@@ -154,7 +154,7 @@ function OnlineUsersSection({ users, loading }) {
   );
 }
 
-// ————— Live Tables (cash + sitgo combined) —————
+// ————— Live Tables —————
 function LiveTablesSection({ tables, loading, onOpenCreate }) {
   const navigate = useNavigate();
 
@@ -193,7 +193,7 @@ function LiveTablesSection({ tables, loading, onOpenCreate }) {
       {tables.map((t, i) => {
         const full = t.players_seated >= t.max_seats;
         const stakes = `${t.small_blind}/${t.big_blind}`;
-        const typeLabel = t.table_type === 'sitgo' ? 'Sit & Go' : 'Cash';
+        const typeLabel = 'Cash';
         return (
           <div key={t.id} style={{
             display: 'grid', gridTemplateColumns: '18px 1.6fr 0.8fr 1fr 1fr 1fr 1fr 1fr',
@@ -287,78 +287,11 @@ function CashTable({ tables, loading, onOpenCreate }) {
   );
 }
 
-// ————— Sit & Go grid —————
-function SitGoGrid({ sitgos, loading, myRegistrations, onRegister, onUnregister, onOpenCreate }) {
-  const navigate = useNavigate();
-  if (loading) return (
-    <div style={{ margin: '0 32px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-      {[1, 2, 3].map(i => <div key={i} style={{ height: 160, background: 'rgba(212,175,55,0.04)', border: '1px solid rgba(212,175,55,0.08)', animation: 'shimmer 1.4s ease-in-out infinite' }} />)}
-    </div>
-  );
-  if (!sitgos.length) return (
-    <div style={{ margin: '0 32px', border: '1px solid rgba(212,175,55,0.12)', padding: '48px 32px', textAlign: 'center' }}>
-      <div style={{ fontSize: 52, color: '#D4AF37', marginBottom: 16, fontFamily: 'serif' }}>♣</div>
-      <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#F5F1E8', marginBottom: 8 }}>Nessun Sit & Go disponibile</div>
-      <button onClick={onOpenCreate} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D4AF37', fontFamily: 'Inter, sans-serif', fontSize: 13, textDecoration: 'underline' }}>Crea il primo</button>
-    </div>
-  );
-  return (
-    <div style={{ margin: '0 32px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-      {sitgos.map(s => {
-        const registered = myRegistrations.has(s.id);
-        const running = s.status === 'running';
-        const n = s.n_registered ?? 0;
-        return (
-          <div key={s.id} style={{ border: '1px solid rgba(212,175,55,0.15)', padding: '20px 22px', background: 'linear-gradient(180deg, rgba(20,64,42,0.25), transparent)', position: 'relative' }}>
-            {running && <span style={{ position: 'absolute', top: 14, right: 14, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', padding: '2px 7px', borderRadius: 2, background: '#c0392b', color: '#fff' }}>LIVE</span>}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-              <div>
-                <div style={{ fontSize: 9.5, letterSpacing: '0.22em', color: 'rgba(245,241,232,0.45)', marginBottom: 4 }}>{s.max_seats} POSTI · {s.speed?.toUpperCase()}</div>
-                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#F5F1E8', fontWeight: 500 }}>{s.name}</div>
-              </div>
-              <Pill accent={n / s.max_seats > 0.75}>{n}/{s.max_seats}</Pill>
-            </div>
-            <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
-              {Array.from({ length: s.max_seats }).map((_, i) => <div key={i} style={{ flex: 1, height: 3, background: i < n ? '#D4AF37' : 'rgba(245,241,232,0.1)' }} />)}
-            </div>
-            <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.55)', marginBottom: 14 }}>
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', color: '#D4AF37' }}>{(s.starting_chips ?? 0).toLocaleString('it-IT')}</span> chips di partenza
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              {registered && !running ? <span style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.12em', padding: '3px 8px', borderRadius: 2, background: 'rgba(212,175,55,0.15)', color: '#D4AF37', border: '1px solid rgba(212,175,55,0.3)' }}>In attesa</span> : <span />}
-              <div style={{ display: 'flex', gap: 8 }}>
-                {running ? <GoldButton size="sm" variant="ghost" onClick={() => s.table_id && navigate(`/table/${s.table_id}`)}>Osserva</GoldButton>
-                  : registered ? <GoldButton size="sm" variant="ghost" onClick={() => onUnregister(s.id)}>Ritira</GoldButton>
-                  : <GoldButton size="sm" onClick={() => onRegister(s.id)}>Iscriviti</GoldButton>}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ————— Main Lobby —————
 export default function Lobby({ view = 'lobby' }) {
   const { tables, loading: tablesLoading } = useTables();
-  const { sitgos, loading: sitgosLoading, refresh: refreshSitGos } = useSitGos();
   const { users: onlineUsers, loading: onlineLoading } = useOnlineUsers();
-  const [myRegistrations, setMyRegistrations] = useState(new Set());
-  const [loadingReg, setLoadingReg] = useState(null);
   const [createModal, setCreateModal] = useState(null);
-
-  const handleRegister = async (id) => {
-    setLoadingReg(id);
-    try { await tablesApi.registerSitGo(id); setMyRegistrations(prev => new Set([...prev, id])); refreshSitGos(); }
-    catch (e) { console.error(e); } finally { setLoadingReg(null); }
-  };
-
-  const handleUnregister = async (id) => {
-    setLoadingReg(id);
-    try { await tablesApi.unregisterSitGo(id); setMyRegistrations(prev => { const s = new Set(prev); s.delete(id); return s; }); refreshSitGos(); }
-    catch (e) { console.error(e); } finally { setLoadingReg(null); }
-  };
 
   const modal = createModal && (
     <CreateTableModal isOpen onClose={() => setCreateModal(null)} defaultType={createModal === 'table' ? undefined : createModal} />
@@ -381,27 +314,7 @@ export default function Lobby({ view = 'lobby' }) {
     </div>
   );
 
-  if (view === 'sitgo') return (
-    <div style={{ paddingBottom: 40 }}>
-      <TopBar subtitle="SIT & GO" title="Sit & Go"
-        actions={<GoldButton variant="ghost" size="sm" onClick={() => setCreateModal('table')}>＋ Tavolo</GoldButton>} />
-      <div style={{
-        padding: '10px 28px 20px',
-        fontFamily: 'Inter, sans-serif', fontSize: 13,
-        color: 'rgba(245,241,232,0.45)', lineHeight: 1.6,
-        borderBottom: '1px solid rgba(212,175,55,0.08)',
-      }}>
-        Torneo rapido che inizia non appena i posti sono esauriti. Tutti partono con lo stesso stack, i ciechi salgono nel tempo — vince chi elimina tutti gli altri.
-      </div>
-      <SitGoGrid sitgos={sitgos} loading={sitgosLoading} myRegistrations={myRegistrations}
-        onRegister={handleRegister} onUnregister={handleUnregister} onOpenCreate={() => setCreateModal('sitgo')} />
-      {modal}
-    </div>
-  );
-
   // ————— Default: overview —————
-  const allLiveTables = [...tables, ...sitgos.filter(s => s.status === 'running' && s.table_id)
-    .map(s => ({ id: s.table_id, name: s.name, table_type: 'sitgo', small_blind: '—', big_blind: '—', players_seated: s.n_registered, max_seats: s.max_seats, speed: s.speed, status: 'running' }))];
 
   return (
     <div style={{ paddingBottom: 40 }}>
@@ -417,19 +330,11 @@ export default function Lobby({ view = 'lobby' }) {
       <OnlineUsersSection users={onlineUsers} loading={onlineLoading} />
 
       <SectionHeading
-        overline={`TAVOLI LIVE · ${tables.length + sitgos.filter(s => s.status === 'running').length} ATTIVI`}
+        overline={`TAVOLI LIVE · ${tables.length} ATTIVI`}
         title="Tavoli aperti"
         action={<GoldButton variant="ghost" size="sm" onClick={() => setCreateModal('table')}>＋ Tavolo</GoldButton>}
       />
       <LiveTablesSection tables={tables} loading={tablesLoading} onOpenCreate={() => setCreateModal('table')} />
-
-      {sitgos.length > 0 && (
-        <>
-          <SectionHeading overline="RAPIDO · INIZIA QUANDO SEI PRONTO" title="Sit & Go" />
-          <SitGoGrid sitgos={sitgos} loading={sitgosLoading} myRegistrations={myRegistrations}
-            onRegister={handleRegister} onUnregister={handleUnregister} onOpenCreate={() => setCreateModal('table')} />
-        </>
-      )}
 
       {modal}
     </div>

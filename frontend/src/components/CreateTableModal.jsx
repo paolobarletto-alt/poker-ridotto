@@ -239,7 +239,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
                   color: type === val ? '#D4AF37' : 'rgba(245,241,232,0.5)',
                   fontSize: 11, fontFamily: 'Inter, sans-serif', letterSpacing: '0.12em',
                   cursor: 'pointer', transition: 'all 0.15s',
-                  marginLeft: val === 'sitgo' ? -1 : 0,
+                  marginLeft: 0,
                 }}>{lbl}</button>
               ))}
             </div>
