@@ -28,35 +28,20 @@ const ROUTE_MAP = {
 export function Sidebar({ user }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [activeSeat, setActiveSeat] = useState(null);
-
-  useEffect(() => {
-    tablesApi.getCurrentSeat()
-      .then(res => setActiveSeat(res.data))
-      .catch(() => setActiveSeat(null));
-  }, []);
-
-  const tableRoute = activeSeat ? `/table/${activeSeat.table_id}` : null;
+  const activeSeat = null;
+  const tableRoute = null;
 
   const items = [
-    { id: 'lobby',   label: 'Lobby',        section: 'gioca' },
     { id: 'cash',    label: 'Cash Game',     section: 'gioca' },
     { id: 'sitgo',   label: 'Sit & Go',      section: 'gioca' },
-    { id: 'table',   label: activeSeat ? 'Tavolo attivo' : 'Nessun tavolo', section: 'sessione', badge: activeSeat ? 'LIVE' : null, disabled: !activeSeat },
-    { id: 'profile', label: 'Profilo',       section: 'account' },
-    { id: 'storico', label: 'Storico mani',  section: 'account' },
-    { id: 'cassa',   label: 'Cassa',         section: 'account' },
+    { id: 'table',   label: 'Nessun tavolo', section: 'sessione', disabled: true },
     ...(user?.is_admin ? [{ id: 'admin', label: 'Admin', section: 'account', badge: 'ADM' }] : []),
   ];
 
   const ROUTE_MAP_LOCAL = {
-    lobby:   '/lobby',
     cash:    '/lobby/cash',
     sitgo:   '/lobby/sitgo',
-    table:   tableRoute || '/lobby',
-    profile: '/profile',
-    storico: '/profile',
-    cassa:   '/lobby',
+    table:   '/lobby',
     admin:   '/admin',
   };
 

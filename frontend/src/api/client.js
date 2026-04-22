@@ -4,9 +4,15 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
 });
 
-// Attach JWT from localStorage on every request
+// Attach JWT from localStorage on every request (safe access)
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('ridotto_token');
+  let token = null;
+  try {
+    token = localStorage.getItem('ridotto_token');
+  } catch (e) {
+    // localStorage not available (private mode or opaque origin)
+    token = null;
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -18,7 +24,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('ridotto_token');
+      try { localStorage.removeItem('ridotto_token'); } catch (e) {}
       window.location.href = '/';
     }
     return Promise.reject(error);

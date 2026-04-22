@@ -117,9 +117,9 @@ function StatTile({ label, value, sub, accent, wide, loading, tooltip }) {
 export default function Profile() {
   const { user, refreshUser } = useAuth();
 
-  const [statsData, setStatsData] = useState(null);
-  const [gameHistory, setGameHistory] = useState(null);
-  const [chipsHistory, setChipsHistory] = useState(null);
+  const [statsData, setStatsData] = useState({});
+  const [gameHistory, setGameHistory] = useState([]);
+  const [chipsHistory, setChipsHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -131,9 +131,9 @@ export default function Profile() {
       api.get('/users/me/chips-history'),
     ])
       .then(([stats, history, chips]) => {
-        setStatsData(stats.data);
-        setGameHistory(history.data);
-        setChipsHistory(chips.data);
+        setStatsData(stats?.data ?? {});
+        setGameHistory(Array.isArray(history?.data) ? history.data : []);
+        setChipsHistory(Array.isArray(chips?.data) ? chips.data : []);
       })
       .catch(() => {
         setStatsData({});
@@ -145,15 +145,15 @@ export default function Profile() {
 
   // Build cumulative P/L series from chips history
   const plData = (() => {
-    if (!chipsHistory) return null;
+    if (!Array.isArray(chipsHistory) || chipsHistory.length === 0) return null;
     const relevant = [...chipsHistory]
-      .filter(e => ['hand_win', 'hand_loss', 'sitgo_win', 'sitgo_loss'].includes(e.reason))
+      .filter(e => ['hand_win', 'hand_loss', 'sitgo_win', 'sitgo_loss'].includes(e?.reason))
       .reverse(); // oldest first
     if (!relevant.length) return null;
     const cumulative = [];
     let sum = 0;
     for (const e of relevant) {
-      sum += e.amount;
+      sum += Number(e?.amount || 0);
       cumulative.push(sum);
     }
     return cumulative;
