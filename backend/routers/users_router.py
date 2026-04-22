@@ -13,6 +13,8 @@ from auth import get_current_user
 from database import get_db
 from models import ChipsLedger, GameHand, HandAction, PokerTable, TableSeat, User
 from schemas import UserPublic, UserResponse
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import func
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -295,6 +297,45 @@ async def chips_history(
         }
         for e in entries
     ]
+
+
+@router.get('/race')
+async def race_leaderboard(period: str = 'weekly', db: AsyncSession = Depends(get_db)):
+    """Return profit leaderboard for all users for the given period: weekly|monthly|annual"""
+    now = datetime.now(timezone.utc)
+    if period == 'weekly':
+        start = now - timedelta(days=7)
+    elif period == 'monthly':
+        start = now - timedelta(days=30)
+    elif period == 'annual' or period == 'yearly' or period == 'year':
+        start = now - timedelta(days=365)
+    else:
+        raise HTTPException(status_code=400, detail='Invalid period')
+
+    # Aggregate profit per user from ChipsLedger within the period
+    profit_subq = (
+        select(ChipsLedger.user_id.label('user_id'), func.coalesce(func.sum(ChipsLedger.amount), 0).label('profit'))
+        .where(ChipsLedger.created_at >= start)
+        .group_by(ChipsLedger.user_id)
+        .subquery()
+    )
+
+    q = (
+        select(User, func.coalesce(profit_subq.c.profit, 0).label('profit'))
+        .outerjoin(profit_subq, User.id == profit_subq.c.user_id)
+        .order_by(func.coalesce(profit_subq.c.profit, 0).desc())
+    )
+
+    res = await db.execute(q)
+    rows = []
+    for user_row, profit in res.all():
+        rows.append({
+            'username': user_row.username,
+            'display_name': user_row.display_name or user_row.username,
+            'avatar_initials': user_row.avatar_initials or (user_row.username[:2].upper() if user_row.username else '?'),
+            'profit': int(profit) if profit is not None else 0,
+        })
+    return rows
 
 
 @router.get("/{username}", response_model=UserPublic)
