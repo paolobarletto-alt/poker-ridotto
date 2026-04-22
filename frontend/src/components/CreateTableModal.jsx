@@ -174,7 +174,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
     if (minBuyin < bb * 10) errors.minBuyin = `Min buy-in deve essere ≥ ${bb * 10}`;
     if (!noMaxBuyin && maxBuyin < minBuyin) errors.maxBuyin = 'Max buy-in deve essere ≥ min buy-in';
   }
-  if (type === 'sitgo' && startChips < 1000) errors.startChips = 'Min 1000 chips';
+  
   const canSubmit = Object.keys(errors).length === 0;
   const visibleErrors = submitted ? errors : {};
 
@@ -192,21 +192,14 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
         speed,
       };
       let res;
-      if (type === 'cash') {
-        res = await tablesApi.createTable({
-          ...basePayload,
-          table_type: 'cash',
-          small_blind: sb,
-          big_blind: bb,
-          min_buyin: minBuyin,
-          max_buyin: noMaxBuyin ? null : maxBuyin,
-        });
-      } else {
-        res = await tablesApi.createSitGo({
-          ...basePayload,
-          starting_chips: startChips,
-        });
-      }
+      res = await tablesApi.createTable({
+        ...basePayload,
+        table_type: 'cash',
+        small_blind: sb,
+        big_blind: bb,
+        min_buyin: minBuyin,
+        max_buyin: noMaxBuyin ? null : maxBuyin,
+      });
       const newId = res.data?.id;
       onClose();
       if (newId) navigate(`/table/${newId}`);
@@ -227,7 +220,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 18, background: 'none', border: 'none', color: 'rgba(245,241,232,0.4)', fontSize: 18, cursor: 'pointer' }}>✕</button>
           <div style={{ fontSize: 9.5, letterSpacing: '0.25em', color: 'rgba(245,241,232,0.45)', fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>NUOVO TAVOLO</div>
           <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: '#F5F1E8' }}>
-            Crea {type === 'cash' ? 'Cash Game' : 'Sit & Go'}
+            Crea Cash Game
           </div>
         </div>
 
@@ -238,7 +231,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
           <div>
             <div style={css.sectionTitle}>TIPO DI GIOCO</div>
             <div style={{ display: 'flex', gap: 0 }}>
-              {[['cash', 'Cash Game'], ['sitgo', 'Sit & Go']].map(([val, lbl]) => (
+              {[['cash', 'Cash Game']].map(([val, lbl]) => (
                 <button key={val} onClick={() => setType(val)} style={{
                   flex: 1, padding: '11px 0',
                   background: type === val ? 'rgba(212,175,55,0.15)' : 'transparent',
@@ -328,20 +321,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
           )}
 
           {/* SEZIONE 4 — Sit & Go: Chips */}
-          {type === 'sitgo' && (
-            <div>
-              <div style={css.sectionTitle}>CHIPS E TORNEO</div>
-              <NumInput label="Chips di partenza per giocatore" value={startChips} onChange={setStartChips} min={1000} step={1000} error={visibleErrors.startChips} />
-              <div style={{ marginTop: 10, fontSize: 10, color: 'rgba(245,241,232,0.4)', fontFamily: 'Inter, sans-serif', lineHeight: 1.5 }}>
-                Il torneo parte quando tutti i posti sono occupati.
-              </div>
-              <div style={{ marginTop: 10, fontSize: 9.5, color: 'rgba(212,175,55,0.6)', fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.8 }}>
-                {BLIND_SCHEDULES[speed].map((l, i) => (
-                  <span key={i}>{i > 0 ? ' · ' : ''}Lv{i + 1}: {l.sb}/{l.bb}</span>
-                ))}
-              </div>
-            </div>
-          )}
+
 
           {/* Server error */}
           {serverError && (
@@ -359,7 +339,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
             onClick={handleSubmit}
             disabled={loading}
           >
-            {loading ? 'Creazione...' : type === 'cash' ? 'CREA TAVOLO' : 'CREA SIT & GO'}
+            {loading ? 'Creazione...' : 'CREA TAVOLO'}
           </button>
         </div>
       </div>

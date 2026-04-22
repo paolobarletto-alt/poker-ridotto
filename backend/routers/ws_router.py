@@ -33,7 +33,7 @@ from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
 from models import ChipsLedger, GameHand, HandAction, PokerTable, TableSeat, User
 from poker_engine import AzioneGioco, FaseGioco, StatoSeat
-from routers.sitgo_router import handle_sitgo_hand_end
+# sitgo handling removed (feature disabled)
 
 logger = logging.getLogger("ridotto.ws_router")
 
@@ -884,7 +884,7 @@ async def _handle_leave_seat(
             db_table_fresh = tbl_res.scalar_one_or_none()
             if db_table_fresh:
                 await _persist_hand_end(db, db_table_fresh, game, game.num_mano)
-                await handle_sitgo_hand_end(table_id, db)
+                # sitgo handling removed
 
     # Torna a "waiting" se non ci sono abbastanza giocatori
     active = game.players_active_count()
@@ -1074,7 +1074,7 @@ async def _post_action_advance(
             tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
             db_table_fresh = tbl_res.scalar_one()
             await _persist_hand_end(db, db_table_fresh, game, game.num_mano)
-            await handle_sitgo_hand_end(table_id, db)
+            # sitgo handling removed
 
         await _handle_busted_players(table_id, game, db_table.id)
 

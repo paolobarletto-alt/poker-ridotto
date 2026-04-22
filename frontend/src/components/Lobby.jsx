@@ -37,19 +37,7 @@ function useTables() {
   return { tables, loading, error };
 }
 
-function useSitGos() {
-  const [sitgos, setSitGos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const fetch = useCallback(() => {
-    tablesApi.listSitGos()
-      .then(res => { setSitGos(res.data); setError(null); })
-      .catch(err => setError(err?.response?.data?.detail || 'Errore'))
-      .finally(() => setLoading(false));
-  }, []);
-  useEffect(() => { fetch(); const id = setInterval(fetch, 10000); return () => clearInterval(id); }, [fetch]);
-  return { sitgos, loading, error, refresh: fetch };
-}
+
 
 function useOnlineUsers() {
   const [users, setUsers] = useState([]);
