@@ -36,6 +36,7 @@ export function Sidebar({ user }) {
     { id: 'sitgo',   label: 'Sit & Go',      section: 'gioca' },
     { id: 'table',   label: 'Nessun tavolo', section: 'sessione', disabled: true },
     { id: 'profile', label: 'Profilo',       section: 'account' },
+    { id: 'race',    label: 'Race',          section: 'account' },
     ...(user?.is_admin ? [{ id: 'admin', label: 'Admin', section: 'account', badge: 'ADM' }] : []),
   ];
 
@@ -45,6 +46,7 @@ export function Sidebar({ user }) {
     sitgo:   '/lobby/sitgo',
     table:   '/lobby',
     profile: '/profile',
+    race:    '/race',
     admin:   '/admin',
   };
 
