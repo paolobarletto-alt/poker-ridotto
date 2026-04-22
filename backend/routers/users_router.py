@@ -51,8 +51,18 @@ async def get_current_seat(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Endpoint removed: frontend no longer uses current-seat
-    raise HTTPException(status_code=404, detail="Endpoint rimosso")
+    result = await db.execute(
+        select(TableSeat)
+        .where(
+            TableSeat.user_id == current_user.id,
+            TableSeat.status != "away",
+        )
+        .limit(1)
+    )
+    seat = result.scalar_one_or_none()
+    if seat is None:
+        return None
+    return {"table_id": str(seat.table_id), "seat_number": seat.seat_number}
 
 
 @router.get("/me/game-history")
@@ -60,8 +70,107 @@ async def game_history(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Endpoint removed: user game history is disabled
-    raise HTTPException(status_code=404, detail="Endpoint rimosso")
+    uid = current_user.id
+
+    # 1. Find all hands the user participated in (via HandAction)
+    actions_result = await db.execute(
+        select(HandAction)
+        .where(HandAction.user_id == uid)
+        .order_by(HandAction.hand_id, HandAction.created_at.asc())
+        .limit(5000)
+    )
+    all_actions = actions_result.scalars().all()
+    if not all_actions:
+        return []
+
+    # Build per-hand stack diff from HandAction as fallback P&L
+    actions_by_hand: dict = defaultdict(list)
+    for a in all_actions:
+        actions_by_hand[a.hand_id].append(a)
+
+    hand_ids = list(actions_by_hand.keys())
+
+    # 2. Fetch GameHand + PokerTable for all those hands
+    hands_result = await db.execute(
+        select(GameHand, PokerTable)
+        .join(PokerTable, GameHand.table_id == PokerTable.id)
+        .where(GameHand.id.in_(hand_ids))
+        .order_by(GameHand.started_at.asc())
+    )
+    hands_with_tables = hands_result.all()
+    if not hands_with_tables:
+        return []
+
+    hand_meta: dict = {str(hand.id): (hand, table) for hand, table in hands_with_tables}
+
+    # 3. Fetch ChipsLedger P&L entries for these hands (most accurate)
+    ledger_result = await db.execute(
+        select(ChipsLedger)
+        .where(
+            ChipsLedger.user_id == uid,
+            ChipsLedger.game_id.in_(hand_ids),
+            ChipsLedger.reason.in_(["hand_win", "hand_loss"]),
+        )
+    )
+    ledger_by_hand: dict = defaultdict(int)
+    for entry in ledger_result.scalars().all():
+        ledger_by_hand[str(entry.game_id)] += entry.amount
+
+    # 4. Group by (table_id, date) → sessions
+    sessions: dict = defaultdict(lambda: {
+        "table_name": "", "table_type": "", "date": None,
+        "time": None, "pnl": 0, "hand_ids": [], "first_at": None, "last_at": None,
+    })
+
+    for hid_raw, acts in actions_by_hand.items():
+        hid = str(hid_raw)
+        meta = hand_meta.get(hid)
+        if not meta:
+            continue
+        hand, table = meta
+        date_key = hand.started_at.date() if hand.started_at else None
+        key = (str(hand.table_id), str(date_key))
+        s = sessions[key]
+        s["table_name"] = table.name
+        s["table_type"] = table.table_type
+        s["date"] = date_key
+        if s["time"] is None and hand.started_at:
+            s["time"] = hand.started_at.strftime("%H:%M")
+        s["hand_ids"].append(hid)
+
+        # Use ChipsLedger P&L if available, else HandAction stack diff as fallback
+        if hid in ledger_by_hand:
+            s["pnl"] += ledger_by_hand[hid]
+        elif acts:
+            s["pnl"] += acts[-1].stack_after - acts[0].stack_before
+
+        ts = hand.started_at
+        if ts:
+            if s["first_at"] is None or ts < s["first_at"]:
+                s["first_at"] = ts
+        ts2 = hand.ended_at
+        if ts2:
+            if s["last_at"] is None or ts2 > s["last_at"]:
+                s["last_at"] = ts2
+
+    result = []
+    for s in sessions.values():
+        duration_minutes = None
+        if s["first_at"] and s["last_at"]:
+            delta = s["last_at"] - s["first_at"]
+            duration_minutes = max(0, int(delta.total_seconds() / 60))
+        result.append({
+            "date": s["date"].isoformat() if s["date"] else None,
+            "time": s["time"],
+            "table_name": s["table_name"],
+            "table_type": s["table_type"],
+            "hands_played": len(s["hand_ids"]),
+            "duration_minutes": duration_minutes,
+            "result_chips": s["pnl"],
+        })
+
+    result.sort(key=lambda x: x["date"] or "", reverse=True)
+    return result[:50]
 
 
 @router.get("/me/stats")
@@ -69,8 +178,99 @@ async def user_stats(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Endpoint removed: user stats disabled
-    raise HTTPException(status_code=404, detail="Endpoint rimosso")
+    uid = current_user.id
+
+    total_hands: int = await db.scalar(
+        select(func.count(distinct(HandAction.hand_id)))
+        .where(HandAction.user_id == uid, HandAction.phase == "preflop")
+    ) or 0
+
+    if total_hands == 0:
+        return {
+            "total_hands": 0,
+            "vpip": None, "pfr": None, "af": None,
+            "win_rate": None, "biggest_pot": None, "net_result": None,
+        }
+
+    vpip_hands: int = await db.scalar(
+        select(func.count(distinct(HandAction.hand_id)))
+        .where(
+            HandAction.user_id == uid,
+            HandAction.phase == "preflop",
+            HandAction.action.in_(["call", "raise", "allin"]),
+        )
+    ) or 0
+
+    pfr_hands: int = await db.scalar(
+        select(func.count(distinct(HandAction.hand_id)))
+        .where(
+            HandAction.user_id == uid,
+            HandAction.phase == "preflop",
+            HandAction.action.in_(["raise", "allin"]),
+        )
+    ) or 0
+
+    af_aggro: int = await db.scalar(
+        select(func.count())
+        .where(
+            HandAction.user_id == uid,
+            HandAction.phase != "preflop",
+            HandAction.action.in_(["raise", "allin"]),
+        )
+    ) or 0
+
+    af_call: int = await db.scalar(
+        select(func.count())
+        .where(
+            HandAction.user_id == uid,
+            HandAction.phase != "preflop",
+            HandAction.action == "call",
+        )
+    ) or 0
+
+    # Hands won: winner_seat matches user's seat_number in that hand
+    won_subq = (
+        select(GameHand.id)
+        .join(HandAction, HandAction.hand_id == GameHand.id)
+        .where(
+            HandAction.user_id == uid,
+            GameHand.winner_seat == HandAction.seat_number,
+        )
+        .distinct()
+        .subquery()
+    )
+    won_count: int = await db.scalar(select(func.count()).select_from(won_subq)) or 0
+
+    biggest_pot: int = await db.scalar(
+        select(func.max(GameHand.pot))
+        .join(HandAction, HandAction.hand_id == GameHand.id)
+        .where(
+            HandAction.user_id == uid,
+            GameHand.winner_seat == HandAction.seat_number,
+        )
+    ) or 0
+
+    net_result: int = await db.scalar(
+        select(func.sum(ChipsLedger.amount))
+        .where(
+            ChipsLedger.user_id == uid,
+            ChipsLedger.reason.in_(["hand_win", "hand_loss", "sitgo_win", "sitgo_loss"]),
+        )
+    ) or 0
+
+    vpip = round(vpip_hands / total_hands * 100, 1) if total_hands >= 20 else None
+    pfr = round(pfr_hands / total_hands * 100, 1) if total_hands >= 20 else None
+    af = round(af_aggro / af_call, 2) if (af_call > 0 and total_hands >= 20) else (0.0 if total_hands >= 20 else None)
+
+    return {
+        "total_hands": total_hands,
+        "vpip": vpip,
+        "pfr": pfr,
+        "af": af,
+        "win_rate": round(won_count / total_hands * 100, 1),
+        "biggest_pot": biggest_pot,
+        "net_result": net_result,
+    }
 
 
 @router.get("/me/chips-history")

@@ -32,16 +32,22 @@ export function Sidebar({ user }) {
   const tableRoute = null;
 
   const items = [
+    { id: 'lobby',   label: 'Lobby',        section: 'gioca' },
     { id: 'cash',    label: 'Cash Game',     section: 'gioca' },
     { id: 'sitgo',   label: 'Sit & Go',      section: 'gioca' },
     { id: 'table',   label: 'Nessun tavolo', section: 'sessione', disabled: true },
+    { id: 'profile', label: 'Profilo',       section: 'account' },
+    { id: 'storico', label: 'Storico mani',  section: 'account' },
     ...(user?.is_admin ? [{ id: 'admin', label: 'Admin', section: 'account', badge: 'ADM' }] : []),
   ];
 
   const ROUTE_MAP_LOCAL = {
+    lobby:   '/lobby',
     cash:    '/lobby/cash',
     sitgo:   '/lobby/sitgo',
     table:   '/lobby',
+    profile: '/profile',
+    storico: '/profile',
     admin:   '/admin',
   };
 

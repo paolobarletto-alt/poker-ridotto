@@ -123,24 +123,58 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
     // Aggiorna il saldo nel contesto auth al mount
     refreshUser();
-    Promise.all([
-      api.get('/users/me/stats'),
-      api.get('/users/me/game-history'),
-      api.get('/users/me/chips-history'),
-    ])
-      .then(([stats, history, chips]) => {
+
+    async function loadAll() {
+      try {
+        const [stats, history, chips] = await Promise.all([
+          api.get('/users/me/stats'),
+          api.get('/users/me/game-history'),
+          api.get('/users/me/chips-history'),
+        ]);
+        if (!mounted) return;
         setStatsData(stats?.data ?? {});
         setGameHistory(Array.isArray(history?.data) ? history.data : []);
         setChipsHistory(Array.isArray(chips?.data) ? chips.data : []);
-      })
-      .catch(() => {
+      } catch (err) {
+        if (!mounted) return;
         setStatsData({});
         setGameHistory([]);
         setChipsHistory([]);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    loadAll();
+
+    // Poll balance every 5s and chips-history every 10s
+    const balInterval = setInterval(async () => {
+      try {
+        const me = await api.get('/auth/me');
+        if (!mounted) return;
+        if (me?.data?.chips_balance != null) {
+          // update context directly
+          if (typeof refreshUser === 'function') refreshUser();
+        }
+      } catch {}
+    }, 5000);
+
+    const chipsInterval = setInterval(async () => {
+      try {
+        const chips = await api.get('/users/me/chips-history');
+        if (!mounted) return;
+        setChipsHistory(Array.isArray(chips?.data) ? chips.data : []);
+      } catch {}
+    }, 10000);
+
+    return () => {
+      mounted = false;
+      clearInterval(balInterval);
+      clearInterval(chipsInterval);
+    };
   }, [refreshUser]);
 
   // Build cumulative P/L series from chips history
