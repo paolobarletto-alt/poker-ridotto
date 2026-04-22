@@ -94,6 +94,9 @@ class User(Base):
     sitgo_registrations: Mapped[List[SitGoRegistration]] = relationship(
         "SitGoRegistration", back_populates="user", lazy="select"
     )
+    game_sessions: Mapped[List[PlayerGameSession]] = relationship(
+        "PlayerGameSession", back_populates="user", lazy="select"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -173,6 +176,10 @@ class PokerTable(Base):
     )
     hands: Mapped[List[GameHand]] = relationship(
         "GameHand", back_populates="table", lazy="select",
+        cascade="all, delete-orphan"
+    )
+    sessions: Mapped[List[PlayerGameSession]] = relationship(
+        "PlayerGameSession", back_populates="table", lazy="select",
         cascade="all, delete-orphan"
     )
 
@@ -260,6 +267,34 @@ class HandAction(Base):
     # ── Relazioni ──────────────────────────────────────────────
     hand: Mapped[GameHand] = relationship("GameHand", back_populates="actions")
     user: Mapped[User] = relationship("User")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLAYER GAME SESSION
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PlayerGameSession(Base):
+    __tablename__ = "player_game_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    table_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("poker_tables.id"), nullable=False)
+    table_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    table_type: Mapped[str] = mapped_column(String(20), nullable=False, default="cash")
+    seat_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_buyin: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    current_stack: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    cashout: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    result_chips: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    hands_played: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    close_reason: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    user: Mapped[User] = relationship("User", back_populates="game_sessions")
+    table: Mapped[PokerTable] = relationship("PokerTable", back_populates="sessions")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

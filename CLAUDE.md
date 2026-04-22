@@ -41,4 +41,8 @@ cd backend && python poker_engine.py
 # Migrazioni SQL (applica su Supabase)
 # backend/migrations/001_invite_codes.sql
 # backend/migrations/002_tables_hands_sitgo.sql
+# backend/migrations/003_player_game_sessions.sql
 ```
+
+## Regola operativa comunicazione Git
+- Ogni volta che proponi comandi Git per commit/push dopo una modifica, devi includere anche i comandi per eseguire i test/local check pertinenti prima del push.

@@ -31,7 +31,7 @@ from auth import get_current_user
 from config import settings
 from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
-from models import ChipsLedger, GameHand, HandAction, PokerTable, TableSeat, User
+from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, PokerTable, TableSeat, User
 from poker_engine import AzioneGioco, FaseGioco, StatoSeat
 # sitgo handling removed (feature disabled)
 
@@ -46,6 +46,28 @@ def _enrich_state(public: dict, seat_map: dict) -> dict:
         if g.get("seat") is None:
             g["seat"] = seat_map.get(g["player_id"])
     return public
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+async def _get_open_session(
+    db: AsyncSession,
+    table_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Optional[PlayerGameSession]:
+    result = await db.execute(
+        select(PlayerGameSession)
+        .where(
+            PlayerGameSession.table_id == table_id,
+            PlayerGameSession.user_id == user_id,
+            PlayerGameSession.status == "open",
+        )
+        .order_by(PlayerGameSession.started_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SCHEMI PYDANTIC
@@ -329,6 +351,15 @@ async def close_table(
                 reason="table_closed",
                 description=f"Tavolo '{table.name}' chiuso",
             ))
+        open_session = await _get_open_session(db, table.id, seat.user_id)
+        if open_session:
+            open_session.current_stack = seat.stack
+            open_session.cashout = seat.stack
+            open_session.result_chips = seat.stack - open_session.total_buyin
+            open_session.ended_at = _now_utc()
+            open_session.last_activity_at = _now_utc()
+            open_session.status = "closed"
+            open_session.close_reason = "table_closed"
         await db.delete(seat)
 
     table.status = "closed"
@@ -461,9 +492,11 @@ async def _persist_hand_end(
     db_seats = {str(s.user_id): s for s in seats_result.scalars().all()}
 
     # Stack aggiornati nell'engine
+    stacks_by_player: dict[str, int] = {}
     for player in public.get("giocatori", []):
         pid = player["player_id"]
         new_stack = player["stack"]
+        stacks_by_player[pid] = new_stack
         db_seat = db_seats.get(pid)
         if db_seat is None:
             continue
@@ -488,6 +521,27 @@ async def _persist_hand_end(
                 game_id=hand_record.id,
                 description=f"Mano #{hand_number} al tavolo '{table.name}'",
             ))
+
+    # Aggiorna le sessioni aperte dei giocatori ancora seduti:
+    # stack corrente, risultato progressivo e mani giocate.
+    if stacks_by_player:
+        session_result = await db.execute(
+            select(PlayerGameSession).where(
+                PlayerGameSession.table_id == table.id,
+                PlayerGameSession.status == "open",
+            )
+        )
+        for session in session_result.scalars().all():
+            pid = str(session.user_id)
+            if pid not in stacks_by_player:
+                continue
+            db_seat = db_seats.get(pid)
+            if db_seat is None or db_seat.status == "away":
+                continue
+            session.current_stack = stacks_by_player[pid]
+            session.result_chips = session.current_stack - session.total_buyin
+            session.hands_played += 1
+            session.last_activity_at = _now_utc()
 
     await db.commit()
     return hand_record
@@ -774,6 +828,20 @@ async def _handle_join_seat(
             status="active",
         )
         db.add(db_seat)
+        db.add(PlayerGameSession(
+            user_id=user.id,
+            table_id=db_table.id,
+            table_name=db_table.name,
+            table_type=db_table.table_type,
+            seat_number=seat_number,
+            total_buyin=buyin,
+            current_stack=buyin,
+            result_chips=0,
+            hands_played=0,
+            status="open",
+            started_at=_now_utc(),
+            last_activity_at=_now_utc(),
+        ))
         db.add(ChipsLedger(
             user_id=user.id,
             amount=-buyin,
@@ -864,6 +932,15 @@ async def _handle_leave_seat(
                 reason="table_cashout",
                 description=f"Uscita dal tavolo '{db_table.name}' posto {seat_number}",
             ))
+        open_session = await _get_open_session(db, db_table.id, user.id)
+        if open_session:
+            open_session.current_stack = remaining_stack
+            open_session.cashout = remaining_stack
+            open_session.result_chips = remaining_stack - open_session.total_buyin
+            open_session.ended_at = _now_utc()
+            open_session.last_activity_at = _now_utc()
+            open_session.status = "closed"
+            open_session.close_reason = "left_table"
         await db.commit()
 
     display = user.display_name or user.username
@@ -952,6 +1029,12 @@ async def _handle_rebuy(
         # Aggiorna DB
         user_db.chips_balance -= amount
         db_seat.stack += amount
+        open_session = await _get_open_session(db, db_table.id, user.id)
+        if open_session:
+            open_session.total_buyin += amount
+            open_session.current_stack = db_seat.stack
+            open_session.result_chips = open_session.current_stack - open_session.total_buyin
+            open_session.last_activity_at = _now_utc()
         db.add(ChipsLedger(
             user_id=user.id,
             amount=-amount,
@@ -1169,7 +1252,7 @@ async def _run_out_cards(table_id: str, db_table: Any, num_mano: int) -> None:
         tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
         db_table_fresh = tbl_res.scalar_one()
         await _persist_hand_end(db, db_table_fresh, game, game.num_mano)
-        await handle_sitgo_hand_end(table_id, db)
+        # sitgo handling removed
 
     await _handle_busted_players(table_id, game, db_table.id)
 

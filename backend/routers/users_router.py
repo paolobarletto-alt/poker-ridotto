@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from collections import defaultdict
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,10 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
 from database import get_db
-from models import ChipsLedger, GameHand, HandAction, PokerTable, TableSeat, User
+from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, TableSeat, User
 from schemas import UserPublic, UserResponse
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import func
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -72,107 +70,31 @@ async def game_history(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    uid = current_user.id
-
-    # 1. Find all hands the user participated in (via HandAction)
-    actions_result = await db.execute(
-        select(HandAction)
-        .where(HandAction.user_id == uid)
-        .order_by(HandAction.hand_id, HandAction.created_at.asc())
-        .limit(5000)
+    sessions_result = await db.execute(
+        select(PlayerGameSession)
+        .where(PlayerGameSession.user_id == current_user.id)
+        .order_by(PlayerGameSession.started_at.desc())
+        .limit(50)
     )
-    all_actions = actions_result.scalars().all()
-    if not all_actions:
-        return []
-
-    # Build per-hand stack diff from HandAction as fallback P&L
-    actions_by_hand: dict = defaultdict(list)
-    for a in all_actions:
-        actions_by_hand[a.hand_id].append(a)
-
-    hand_ids = list(actions_by_hand.keys())
-
-    # 2. Fetch GameHand + PokerTable for all those hands
-    hands_result = await db.execute(
-        select(GameHand, PokerTable)
-        .join(PokerTable, GameHand.table_id == PokerTable.id)
-        .where(GameHand.id.in_(hand_ids))
-        .order_by(GameHand.started_at.asc())
-    )
-    hands_with_tables = hands_result.all()
-    if not hands_with_tables:
-        return []
-
-    hand_meta: dict = {str(hand.id): (hand, table) for hand, table in hands_with_tables}
-
-    # 3. Fetch ChipsLedger P&L entries for these hands (most accurate)
-    ledger_result = await db.execute(
-        select(ChipsLedger)
-        .where(
-            ChipsLedger.user_id == uid,
-            ChipsLedger.game_id.in_(hand_ids),
-            ChipsLedger.reason.in_(["hand_win", "hand_loss"]),
-        )
-    )
-    ledger_by_hand: dict = defaultdict(int)
-    for entry in ledger_result.scalars().all():
-        ledger_by_hand[str(entry.game_id)] += entry.amount
-
-    # 4. Group by (table_id, date) → sessions
-    sessions: dict = defaultdict(lambda: {
-        "table_name": "", "table_type": "", "date": None,
-        "time": None, "pnl": 0, "hand_ids": [], "first_at": None, "last_at": None,
-    })
-
-    for hid_raw, acts in actions_by_hand.items():
-        hid = str(hid_raw)
-        meta = hand_meta.get(hid)
-        if not meta:
-            continue
-        hand, table = meta
-        date_key = hand.started_at.date() if hand.started_at else None
-        key = (str(hand.table_id), str(date_key))
-        s = sessions[key]
-        s["table_name"] = table.name
-        s["table_type"] = table.table_type
-        s["date"] = date_key
-        if s["time"] is None and hand.started_at:
-            s["time"] = hand.started_at.strftime("%H:%M")
-        s["hand_ids"].append(hid)
-
-        # Use ChipsLedger P&L if available, else HandAction stack diff as fallback
-        if hid in ledger_by_hand:
-            s["pnl"] += ledger_by_hand[hid]
-        elif acts:
-            s["pnl"] += acts[-1].stack_after - acts[0].stack_before
-
-        ts = hand.started_at
-        if ts:
-            if s["first_at"] is None or ts < s["first_at"]:
-                s["first_at"] = ts
-        ts2 = hand.ended_at
-        if ts2:
-            if s["last_at"] is None or ts2 > s["last_at"]:
-                s["last_at"] = ts2
+    sessions = sessions_result.scalars().all()
+    now = datetime.now(timezone.utc)
 
     result = []
-    for s in sessions.values():
-        duration_minutes = None
-        if s["first_at"] and s["last_at"]:
-            delta = s["last_at"] - s["first_at"]
-            duration_minutes = max(0, int(delta.total_seconds() / 60))
+    for s in sessions:
+        end_at = s.ended_at or now
+        delta = end_at - s.started_at if s.started_at else None
+        duration_minutes = max(0, int(delta.total_seconds() / 60)) if delta else None
         result.append({
-            "date": s["date"].isoformat() if s["date"] else None,
-            "time": s["time"],
-            "table_name": s["table_name"],
-            "table_type": s["table_type"],
-            "hands_played": len(s["hand_ids"]),
+            "date": s.started_at.date().isoformat() if s.started_at else None,
+            "time": s.started_at.strftime("%H:%M") if s.started_at else None,
+            "table_name": s.table_name,
+            "table_type": s.table_type,
+            "hands_played": s.hands_played,
             "duration_minutes": duration_minutes,
-            "result_chips": s["pnl"],
+            "result_chips": s.result_chips,
         })
 
-    result.sort(key=lambda x: x["date"] or "", reverse=True)
-    return result[:50]
+    return result
 
 
 @router.get("/me/stats")
@@ -312,17 +234,15 @@ async def race_leaderboard(period: str = 'weekly', db: AsyncSession = Depends(ge
     else:
         raise HTTPException(status_code=400, detail='Invalid period')
 
-    # Profitto = vincite - perdite di gioco (esclude ricariche admin e altri movimenti)
+    # Profitto Race: somma del risultato delle sessioni (vincite - perdite),
+    # senza movimenti esterni come ricariche admin.
     profit_subq = (
         select(
-            ChipsLedger.user_id.label('user_id'),
-            func.coalesce(func.sum(ChipsLedger.amount), 0).label('profit')
+            PlayerGameSession.user_id.label('user_id'),
+            func.coalesce(func.sum(PlayerGameSession.result_chips), 0).label('profit')
         )
-        .where(
-            ChipsLedger.created_at >= start,
-            ChipsLedger.reason.in_(["hand_win", "hand_loss", "sitgo_win", "sitgo_loss"]),
-        )
-        .group_by(ChipsLedger.user_id)
+        .where(PlayerGameSession.started_at >= start)
+        .group_by(PlayerGameSession.user_id)
         .subquery()
     )
 
