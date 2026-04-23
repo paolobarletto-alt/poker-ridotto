@@ -10,7 +10,7 @@ from typing import Dict, List
 
 _presence: Dict[str, datetime] = {}
 
-ONLINE_THRESHOLD_SECONDS: int = 300  # 5 minutes
+ONLINE_THRESHOLD_SECONDS: int = 45  # 45 sec
 
 
 def touch(user_id: uuid.UUID) -> None:
