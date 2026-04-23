@@ -176,7 +176,8 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
     const rawSeats = d.giocatori ?? d.seats ?? [];
     const seats    = normalizeSeats(rawSeats, userId);
     const mine     = seats.find((s) => s?.is_me);
-    if (mine) setMySeat(mine.seat);
+    setMySeat(mine ? mine.seat : null);
+    if (!mine) setMyCards([]);
 
     const newState = {
       seats,
@@ -533,6 +534,18 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
         eliminatedClearRef.current = setTimeout(
           () => setLatestEliminated(null), ELIMINATED_TTL
         );
+        if (msg.username === user?.username) {
+          setMySeat(null);
+          setMyCards([]);
+          stopCountdown();
+          setTableState((prev) => {
+            const seats = [...prev.seats];
+            if (msg.seat != null && msg.seat >= 0 && msg.seat < seats.length) {
+              seats[msg.seat] = null;
+            }
+            return { ...prev, seats, acting_seat: null, timer_seconds: 0 };
+          });
+        }
         pushLog(`${msg.username} eliminato · ${msg.position}° posto`);
         break;
       }

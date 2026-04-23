@@ -444,7 +444,7 @@ async def handle_sitgo_hand_end(table_id: str, db: AsyncSession):
         return
 
     tournament_result = await db.execute(
-        select(SitGoTournament).where(SitGoTournament.id == uuid.UUID(tournament_id))
+        select(SitGoTournament).where(SitGoTournament.id == uuid.UUID(tournament_id)).with_for_update()
     )
     tournament = tournament_result.scalar_one_or_none()
     if tournament is None or tournament.status != "running":
@@ -462,9 +462,9 @@ async def handle_sitgo_hand_end(table_id: str, db: AsyncSession):
             SitGoRegistration.final_position.is_(None),
         )
         .order_by(SitGoRegistration.registered_at)
+        .with_for_update(of=SitGoRegistration)
     )
     active_rows = list(regs_result)
-    players_in_game = len(active_rows)
 
     eliminated_rows = []
     for row in active_rows:
@@ -477,18 +477,16 @@ async def handle_sitgo_hand_end(table_id: str, db: AsyncSession):
     if not eliminated_rows:
         return
 
-    next_position = players_in_game
     for row in eliminated_rows:
         reg = row.SitGoRegistration
         uid = str(reg.user_id)
         seat = game_manager.seat_for_user(table_id, uid)
 
-        reg.final_position = next_position
+        reg.final_position = await _next_elimination_position(db, tournament.id)
         reg.player_status = "eliminated"
         reg.elimination_reason = "busted"
         reg.eliminated_at = _now()
         reg.chips_at_end = 0
-        next_position -= 1
 
         if uid in game.seats:
             game.rimuovi_giocatore(uid)
@@ -559,15 +557,20 @@ async def _finish_tournament(
     db: AsyncSession,
 ):
     now = _now()
-    tournament = await db.get(SitGoTournament, uuid.UUID(tournament_id))
+    tournament_result = await db.execute(
+        select(SitGoTournament).where(SitGoTournament.id == uuid.UUID(tournament_id)).with_for_update()
+    )
+    tournament = tournament_result.scalar_one_or_none()
     if tournament is None:
+        return
+    if tournament.status == "finished" and tournament.payout_awarded:
         return
 
     winner_reg_result = await db.execute(
         select(SitGoRegistration).where(
             SitGoRegistration.tournament_id == tournament.id,
             SitGoRegistration.user_id == uuid.UUID(winner_user_id),
-        )
+        ).with_for_update()
     )
     winner_reg = winner_reg_result.scalar_one_or_none()
     if winner_reg:
@@ -585,6 +588,7 @@ async def _finish_tournament(
         .join(User, User.id == SitGoRegistration.user_id)
         .where(SitGoRegistration.tournament_id == tournament.id)
         .order_by(SitGoRegistration.final_position.asc().nullslast())
+        .with_for_update(of=SitGoRegistration)
     )
     results = results_result.all()
 
@@ -603,18 +607,23 @@ async def _finish_tournament(
         user = row.User
         position = reg.final_position or 0
         payout = payouts.get(position, 0)
+        already_awarded = reg.payout_awarded or 0
+        payout_delta = max(0, payout - already_awarded)
         reg.payout_awarded = payout
-        reg.payout_awarded_at = now if payout > 0 else None
+        if payout > 0:
+            reg.payout_awarded_at = reg.payout_awarded_at or now
+        else:
+            reg.payout_awarded_at = None
         if position > 1 and reg.player_status == "active":
             reg.player_status = "eliminated"
             reg.elimination_reason = reg.elimination_reason or "busted"
             reg.eliminated_at = reg.eliminated_at or now
-        if payout > 0:
-            user.chips_balance += payout
+        if payout_delta > 0:
+            user.chips_balance += payout_delta
             db.add(
                 ChipsLedger(
                     user_id=user.id,
-                    amount=payout,
+                    amount=payout_delta,
                     balance_after=user.chips_balance,
                     reason="sitgo_payout",
                     game_id=tournament.id,
@@ -692,3 +701,21 @@ async def _finish_tournament(
         game_manager.unregister_tournament(table_id)
 
     asyncio.create_task(_close_table())
+
+
+async def _next_elimination_position(db: AsyncSession, tournament_id: uuid.UUID) -> int:
+    total_result = await db.execute(
+        select(func.count()).select_from(SitGoRegistration).where(
+            SitGoRegistration.tournament_id == tournament_id
+        )
+    )
+    total_players = total_result.scalar() or 0
+
+    assigned_result = await db.execute(
+        select(func.count()).select_from(SitGoRegistration).where(
+            SitGoRegistration.tournament_id == tournament_id,
+            SitGoRegistration.final_position.is_not(None),
+        )
+    )
+    assigned_positions = assigned_result.scalar() or 0
+    return max(1, total_players - assigned_positions)

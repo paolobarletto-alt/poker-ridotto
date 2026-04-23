@@ -33,7 +33,12 @@ from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
 from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, PokerTable, SitGoRegistration, SitGoTournament, TableSeat, User
 from poker_engine import AzioneGioco, FaseGioco, StatoSeat
-from routers.sitgo_router import _finish_tournament, ensure_sitgo_blinds_started, handle_sitgo_hand_end
+from routers.sitgo_router import (
+    _finish_tournament,
+    _next_elimination_position,
+    ensure_sitgo_blinds_started,
+    handle_sitgo_hand_end,
+)
 
 logger = logging.getLogger("ridotto.ws_router")
 
@@ -91,16 +96,30 @@ async def _enforce_sitgo_disconnect_timeout(table_id: str, user_id: str) -> None
         game = game_manager.get_table(table_id)
         if game is None or not game_manager.is_seated(table_id, user_id):
             return
+        if game_manager._connections.get(table_id, {}).get(user_id) is not None:
+            return
 
         async with AsyncSessionLocal() as db:
-            table = await db.get(PokerTable, uuid.UUID(table_id))
+            table_result = await db.execute(
+                select(PokerTable).where(PokerTable.id == uuid.UUID(table_id)).with_for_update()
+            )
+            table = table_result.scalar_one_or_none()
             if table is None or table.table_type != "sitgo":
                 return
             user = await db.get(User, uuid.UUID(user_id))
             if user is None:
                 return
+            seat_result = await db.execute(
+                select(TableSeat).where(
+                    TableSeat.table_id == table.id,
+                    TableSeat.user_id == user.id,
+                ).with_for_update()
+            )
+            seat = seat_result.scalar_one_or_none()
+            if seat is None or seat.status != "away":
+                return
             t_result = await db.execute(
-                select(SitGoTournament).where(SitGoTournament.table_id == table.id)
+                select(SitGoTournament).where(SitGoTournament.table_id == table.id).with_for_update()
             )
             tournament = t_result.scalar_one_or_none()
             if tournament is None or tournament.status != "running":
@@ -1197,29 +1216,27 @@ async def _handle_leave_seat(
         final_position = None
         payout_awarded = 0
         if db_table.table_type == "sitgo" and tournament:
+            tournament_locked = None
+            if tournament_running:
+                t_lock_result = await db.execute(
+                    select(SitGoTournament).where(SitGoTournament.id == tournament.id).with_for_update()
+                )
+                tournament_locked = t_lock_result.scalar_one_or_none()
             reg_result = await db.execute(
                 select(SitGoRegistration).where(
                     SitGoRegistration.tournament_id == tournament.id,
                     SitGoRegistration.user_id == user.id,
-                )
+                ).with_for_update()
             )
             reg = reg_result.scalar_one_or_none()
             if reg:
-                if tournament_running and reg.final_position is None:
-                    active_regs_result = await db.execute(
-                        select(func.count()).select_from(SitGoRegistration).where(
-                            SitGoRegistration.tournament_id == tournament.id,
-                            SitGoRegistration.final_position.is_(None),
-                        )
-                    )
-                    active_regs = active_regs_result.scalar() or 0
-                    if active_regs > 0:
-                        reg.final_position = active_regs
-                        reg.chips_at_end = 0
-                        reg.player_status = "left" if leave_reason in ("left", "disconnect_timeout") else "eliminated"
-                        reg.elimination_reason = leave_reason
-                        reg.eliminated_at = _now_utc()
-                        eliminated_now = True
+                if tournament_running and reg.final_position is None and tournament_locked and tournament_locked.status == "running":
+                    reg.final_position = await _next_elimination_position(db, tournament.id)
+                    reg.chips_at_end = 0
+                    reg.player_status = "left" if leave_reason in ("left", "disconnect_timeout") else "eliminated"
+                    reg.elimination_reason = leave_reason
+                    reg.eliminated_at = _now_utc()
+                    eliminated_now = True
 
                     remaining_regs_result = await db.execute(
                         select(SitGoRegistration).where(
