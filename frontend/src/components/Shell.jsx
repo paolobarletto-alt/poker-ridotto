@@ -2,17 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { tablesApi } from '../api/tables';
 
-// ————— Traffic lights —————
-export function TrafficLights() {
-  return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ff5f57' }} />
-      <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#febc2e' }} />
-      <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#28c840' }} />
-    </div>
-  );
-}
-
 // ————— Sidebar —————
 const ROUTE_MAP = {
   lobby:   '/lobby',
@@ -65,12 +54,8 @@ export function Sidebar({ user }) {
       display: 'flex', flexDirection: 'column',
       padding: '14px 0',
     }}>
-      <div style={{ padding: '4px 16px 22px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <TrafficLights />
-      </div>
-
       {/* Logo */}
-      <div style={{ padding: '0 20px 24px', borderBottom: '1.5px solid rgba(212,175,55,0.18)' }}>
+      <div style={{ padding: '12px 20px 24px', borderBottom: '1.5px solid rgba(212,175,55,0.18)' }}>
         <div style={{
           fontFamily: 'Playfair Display, serif', fontSize: 26, fontWeight: 700,
           color: '#D4AF37', letterSpacing: '-0.02em', lineHeight: 1,
