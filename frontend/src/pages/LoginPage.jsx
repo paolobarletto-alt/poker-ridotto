@@ -122,6 +122,10 @@ function WelcomeBackground() {
       delay: -(i * 1.9),
       tilt: -22 + ((i * 9) % 45),
       spinDuration: 8 + ((i * 2) % 8),
+      driftX: -44 + ((i * 13) % 89),
+      driftY: -32 + ((i * 17) % 65),
+      driftZ: i % 3 === 0 ? 52 : i % 3 === 1 ? 32 : 18,
+      pathRotation: -8 + ((i * 5) % 17),
       color: i % 4 === 0 ? '#8a1a28' : i % 4 === 1 ? '#0f3d2a' : i % 4 === 2 ? '#1a1a1a' : '#1a1f3a',
       accent: i % 3 === 0 ? '#D4AF37' : '#f5f1e8',
     })),
@@ -191,7 +195,11 @@ function WelcomeBackground() {
             marginTop: -(chip.size / 2),
             opacity: chip.depth === 'front' ? 0.5 : chip.depth === 'mid' ? 0.4 : 0.3,
             filter: chip.depth === 'front' ? 'drop-shadow(0 10px 24px rgba(0,0,0,0.7))' : 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))',
-            animation: `welcome-chip-float ${chip.duration}s ease-in-out ${chip.delay}s infinite`,
+            '--chip-dx': `${chip.driftX}px`,
+            '--chip-dy': `${chip.driftY}px`,
+            '--chip-dz': `${chip.driftZ}px`,
+            '--chip-path-rot': `${chip.pathRotation}deg`,
+            animation: `welcome-chip-space ${chip.duration}s ease-in-out ${chip.delay}s infinite`,
             transformStyle: 'preserve-3d',
             zIndex: chip.depth === 'front' ? 2 : 1,
           }}
@@ -405,9 +413,19 @@ export default function LoginPage() {
           88%  { opacity: 1; }
           100% { transform: translateY(-12vh) translateX(32px); opacity: 0; }
         }
-        @keyframes welcome-chip-float {
-          0%,100% { transform: translate3d(0,0,0) scale(1); }
-          50% { transform: translate3d(16px,-18px,0) scale(1.04); }
+        @keyframes welcome-chip-space {
+          0% {
+            transform: translate3d(calc(var(--chip-dx, 0px) * -0.45), calc(var(--chip-dy, 0px) * -0.35), calc(var(--chip-dz, 0px) * -0.55)) rotateZ(calc(var(--chip-path-rot, 0deg) * -0.6)) scale(0.94);
+          }
+          35% {
+            transform: translate3d(calc(var(--chip-dx, 0px) * 0.2), calc(var(--chip-dy, 0px) * -0.75), calc(var(--chip-dz, 0px) * 0.45)) rotateZ(calc(var(--chip-path-rot, 0deg) * 0.35)) scale(1.02);
+          }
+          70% {
+            transform: translate3d(calc(var(--chip-dx, 0px) * 0.92), calc(var(--chip-dy, 0px) * 0.38), calc(var(--chip-dz, 0px) * 0.92)) rotateZ(var(--chip-path-rot, 0deg)) scale(1.06);
+          }
+          100% {
+            transform: translate3d(calc(var(--chip-dx, 0px) * -0.3), calc(var(--chip-dy, 0px) * 0.64), calc(var(--chip-dz, 0px) * -0.35)) rotateZ(calc(var(--chip-path-rot, 0deg) * -0.4)) scale(0.97);
+          }
         }
         @keyframes welcome-chip-spin {
           from { transform: rotateX(var(--chip-tilt, 0deg)) rotateY(0deg); }
