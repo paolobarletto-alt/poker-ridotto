@@ -127,23 +127,39 @@ function createFlightScaffold({ kind, from, to, payload = null, delayMs = 0, dur
 
 function FlightCard({ flight, cardBack = 'ridotto' }) {
   const [started, setStarted] = useState(false);
+  const [landed, setLanded] = useState(false);
+  const durationMs = Math.max(160, flight.durationMs ?? ANIM_TIMINGS.baseMs);
+  const travelMs = Math.max(160, Math.round(durationMs * 0.76));
 
   useEffect(() => {
     let raf = null;
+    let settleRaf = null;
+    let settleTimeoutId = null;
+    setStarted(false);
+    setLanded(false);
     const timeoutId = setTimeout(() => {
-      raf = requestAnimationFrame(() => setStarted(true));
+      raf = requestAnimationFrame(() => {
+        setStarted(true);
+        settleTimeoutId = window.setTimeout(() => {
+          settleRaf = requestAnimationFrame(() => setLanded(true));
+        }, travelMs);
+      });
     }, Math.max(0, flight.delayMs ?? 0));
     return () => {
       clearTimeout(timeoutId);
+      if (settleTimeoutId) window.clearTimeout(settleTimeoutId);
       if (raf) cancelAnimationFrame(raf);
+      if (settleRaf) cancelAnimationFrame(settleRaf);
     };
-  }, [flight.delayMs, flight.id]);
+  }, [flight.delayMs, flight.id, travelMs]);
 
   const from = flight.from ?? { x: 0, y: 0 };
   const to = flight.to ?? from;
   const dx = (to.x ?? 0) - (from.x ?? 0);
   const dy = (to.y ?? 0) - (from.y ?? 0);
-  const durationMs = Math.max(160, flight.durationMs ?? ANIM_TIMINGS.baseMs);
+  const rotateFrom = flight.rotateFrom ?? -8;
+  const rotateTo = flight.rotateTo ?? 0;
+  const rotateMid = flight.rotateMid ?? (rotateFrom * 0.4);
 
   return (
     <div
@@ -151,13 +167,23 @@ function FlightCard({ flight, cardBack = 'ridotto' }) {
         position: 'absolute',
         left: from.x ?? 0,
         top: from.y ?? 0,
-        transform: `translate(-50%,-50%) translate(${started ? dx : 0}px,${started ? dy : 0}px) scale(${started ? 1 : 0.84}) rotate(${started ? (flight.rotateTo ?? 0) : (flight.rotateFrom ?? -8)}deg)`,
+        transform: `translate(-50%,-50%) translate(${started ? dx : 0}px,${started ? dy : 0}px) scale(${started ? 1 : 0.84})`,
         transition: `transform ${durationMs}ms ${flight.easing ?? ANIM_EASINGS.cardTravel}, opacity ${Math.min(240, durationMs)}ms ${ANIM_EASINGS.ease}`,
         opacity: started ? 1 : 0,
         willChange: 'transform,opacity',
       }}
     >
-      <Card card="back" size={flight.size ?? 'sm'} cardBack={cardBack} />
+      <div
+        style={{
+          transform: `rotate(${started ? (landed ? rotateTo : rotateMid) : rotateFrom}deg)`,
+          transition: landed
+            ? `transform ${Math.max(ANIM_TIMINGS.settleMs, 170)}ms ${ANIM_EASINGS.cardFlipBounce}`
+            : `transform ${travelMs}ms ${flight.easing ?? ANIM_EASINGS.cardTravel}`,
+          willChange: 'transform',
+        }}
+      >
+        <Card card="back" size={flight.size ?? 'sm'} cardBack={cardBack} />
+      </div>
     </div>
   );
 }
@@ -1001,6 +1027,8 @@ export default function PokerTable({
   const previousHandNumberRef = useRef(null);
   const previousTableIdRef = useRef(tableId ?? null);
   const previousConnectedRef = useRef(connected);
+  const previousPhaseRef = useRef('waiting');
+  const preflopCycleRef = useRef(0);
   const seatOccupancySignatureRef = useRef('');
   const showdownSignatureRef = useRef('');
   const lastWinnerAnimKeyRef = useRef('');
@@ -1361,6 +1389,14 @@ export default function PokerTable({
   }, [tableId, hardResetVisualState]);
 
   useEffect(() => {
+    if (phase === 'preflop' && previousPhaseRef.current !== 'preflop') {
+      preflopCycleRef.current += 1;
+      dealtHandRef.current = null;
+    }
+    previousPhaseRef.current = phase;
+  }, [phase]);
+
+  useEffect(() => {
     const previousHand = previousHandNumberRef.current;
     if (previousHand !== null && handNumber !== previousHand) {
       hardResetVisualState();
@@ -1384,8 +1420,9 @@ export default function PokerTable({
 
   useEffect(() => {
     if (!connected || handNumber <= 0 || phase !== 'preflop') return;
-    if (dealtHandRef.current === handNumber) return;
-    dealtHandRef.current = handNumber;
+    const dealCycleKey = `${handNumber}-${preflopCycleRef.current}`;
+    if (dealtHandRef.current === dealCycleKey) return;
+    dealtHandRef.current = dealCycleKey;
     const generation = animationGenerationRef.current;
 
     const timeoutId = scheduleAnimationTimeout(() => {
@@ -1408,10 +1445,11 @@ export default function PokerTable({
             delayMs,
             durationMs: Math.max(ANIM_TIMINGS.quickMs + 180, 420),
           });
-          flight.animKey = `deal-hole-${handNumber}-${idx}-${cardIdx}`;
+          flight.animKey = `deal-hole-${dealCycleKey}-${idx}-${cardIdx}`;
           flight.size = mySeat === idx ? 'md' : 'sm';
           flight.rotateFrom = cardIdx === 0 ? -16 : 16;
-          flight.rotateTo = cardIdx === 0 ? -4 : 4;
+          flight.rotateMid = cardIdx === 0 ? -10 : 10;
+          flight.rotateTo = cardIdx === 0 ? -2 : 2;
           flights.push(flight);
           queueScaffoldFlight({
             kind: flight.kind,
@@ -1776,6 +1814,7 @@ export default function PokerTable({
                   height: 72,
                   opacity: 0.9,
                   pointerEvents: 'none',
+                  zIndex: 3,
                 }}
               >
                 <Card card="back" size="md" cardBack={cardBack} />
@@ -1785,7 +1824,7 @@ export default function PokerTable({
               </div>
 
               {/* Carte comuni */}
-              <div ref={communityAnchorRef} style={{ position: 'absolute', top: '45%', left: '50%', transform: 'translate(-50%,-50%)', display: 'flex', gap: 5 }}>
+              <div ref={communityAnchorRef} style={{ position: 'absolute', top: '45%', left: '50%', transform: 'translate(-50%,-50%)', display: 'flex', gap: 5, zIndex: 2 }}>
                 {[0, 1, 2, 3, 4].map((i) => (
                   <div
                     key={i}
