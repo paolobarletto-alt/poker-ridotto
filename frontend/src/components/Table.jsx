@@ -666,6 +666,7 @@ function Seat({
   showdownResult,
   showdownReveal,
   seatDelta,
+  emptyDisabled = false,
   anchorRef,
   cardAnchorRef,
   stackAnchorRef,
@@ -688,16 +689,45 @@ function Seat({
     return (
       <div
         ref={anchorRef}
-        role="button" tabIndex={0}
-        onClick={onEmptyClick}
-        onKeyDown={(e) => e.key === 'Enter' && onEmptyClick()}
-        style={{ position: 'absolute', ...pos, width: 130, transform: 'translate(-50%,-50%)', textAlign: 'center', cursor: 'pointer' }}
-        title={`Siediti al posto ${seatIndex + 1}`}
+        role="button" tabIndex={emptyDisabled ? -1 : 0}
+        onClick={emptyDisabled ? undefined : onEmptyClick}
+        onKeyDown={(e) => !emptyDisabled && e.key === 'Enter' && onEmptyClick()}
+        style={{ position: 'absolute', ...pos, width: 130, transform: 'translate(-50%,-50%)', textAlign: 'center', cursor: emptyDisabled ? 'not-allowed' : 'pointer' }}
+        title={emptyDisabled ? 'Posto non disponibile per questo tavolo' : `Siediti al posto ${seatIndex + 1}`}
       >
         <div
-          style={{ width: 72, height: 72, borderRadius: '50%', border: '2px dashed rgba(212,175,55,0.6)', background: 'rgba(212,175,55,0.07)', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(212,175,55,0.75)', fontSize: 10, letterSpacing: '0.2em', fontFamily: 'Inter, sans-serif', transition: 'all 0.2s', boxShadow: '0 0 12px rgba(212,175,55,0.12)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#D4AF37'; e.currentTarget.style.color = '#D4AF37'; e.currentTarget.style.background = 'rgba(212,175,55,0.15)'; e.currentTarget.style.boxShadow = '0 0 18px rgba(212,175,55,0.3)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.6)'; e.currentTarget.style.color = 'rgba(212,175,55,0.75)'; e.currentTarget.style.background = 'rgba(212,175,55,0.07)'; e.currentTarget.style.boxShadow = '0 0 12px rgba(212,175,55,0.12)'; }}
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: '50%',
+            border: emptyDisabled ? '2px dashed rgba(245,241,232,0.22)' : '2px dashed rgba(212,175,55,0.6)',
+            background: emptyDisabled ? 'rgba(245,241,232,0.06)' : 'rgba(212,175,55,0.07)',
+            margin: '0 auto',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: emptyDisabled ? 'rgba(245,241,232,0.4)' : 'rgba(212,175,55,0.75)',
+            fontSize: 10,
+            letterSpacing: '0.2em',
+            fontFamily: 'Inter, sans-serif',
+            transition: 'all 0.2s',
+            boxShadow: emptyDisabled ? 'none' : '0 0 12px rgba(212,175,55,0.12)',
+            opacity: emptyDisabled ? 0.72 : 1,
+          }}
+          onMouseEnter={(e) => {
+            if (emptyDisabled) return;
+            e.currentTarget.style.borderColor = '#D4AF37';
+            e.currentTarget.style.color = '#D4AF37';
+            e.currentTarget.style.background = 'rgba(212,175,55,0.15)';
+            e.currentTarget.style.boxShadow = '0 0 18px rgba(212,175,55,0.3)';
+          }}
+          onMouseLeave={(e) => {
+            if (emptyDisabled) return;
+            e.currentTarget.style.borderColor = 'rgba(212,175,55,0.6)';
+            e.currentTarget.style.color = 'rgba(212,175,55,0.75)';
+            e.currentTarget.style.background = 'rgba(212,175,55,0.07)';
+            e.currentTarget.style.boxShadow = '0 0 12px rgba(212,175,55,0.12)';
+          }}
         >
           VUOTO
         </div>
@@ -1966,6 +1996,7 @@ export default function PokerTable({
                 cardBack={cardBack}
                 showdownResult={showdownResults?.find((r) => r.seat === idx) ?? null}
                 showdownReveal={showdownRevealTokens[idx] ?? null}
+                emptyDisabled={idx >= totalSeats}
                 anchorRef={(node) => setSeatAnchorRef(idx, node)}
                 cardAnchorRef={(node) => setSeatCardAnchorRef(idx, node)}
                 stackAnchorRef={(node) => setSeatStackAnchorRef(idx, node)}
