@@ -1304,6 +1304,7 @@ export default function PokerTable({
     animationQueueRef.current.clear();
     previousTableSnapshotRef.current = null;
     dealtHandRef.current = null;
+    preflopCycleRef.current = 0;
     previousCommunityRef.current = [];
     showdownSignatureRef.current = '';
     lastWinnerAnimKeyRef.current = '';
