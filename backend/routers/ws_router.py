@@ -33,7 +33,7 @@ from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
 from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, PokerTable, SitGoRegistration, SitGoTournament, TableSeat, User
 from poker_engine import AzioneGioco, FaseGioco, StatoSeat
-from routers.sitgo_router import _finish_tournament, handle_sitgo_hand_end
+from routers.sitgo_router import _finish_tournament, ensure_sitgo_blinds_started, handle_sitgo_hand_end
 
 logger = logging.getLogger("ridotto.ws_router")
 
@@ -1604,6 +1604,9 @@ async def _delayed_start_hand(
         if tbl and tbl.status == "waiting":
             tbl.status = "running"
             await db.commit()
+
+    if db_table.table_type == "sitgo" and game.num_mano == 1:
+        await ensure_sitgo_blinds_started(table_id)
 
     logger.info("Nuova mano #%d avviata al tavolo %s", game.num_mano, table_id)
 

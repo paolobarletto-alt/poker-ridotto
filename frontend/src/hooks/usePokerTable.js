@@ -239,6 +239,14 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           acting_seat:   null,
           timer_seconds: 0,
         }));
+        if (isTournament) {
+          setBlindLevelEndsAt((prev) => {
+            if (prev) return prev;
+            const currentLevel = tournament?.blind_schedule?.[(tournament?.current_blind_level ?? 1) - 1];
+            const durationSeconds = Number(currentLevel?.duration_seconds ?? 0);
+            return durationSeconds > 0 ? new Date(Date.now() + durationSeconds * 1000) : prev;
+          });
+        }
         stopCountdown();
         pushLog(`── Mano #${msg.hand_number ?? ''} ──`);
         break;
@@ -336,11 +344,12 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           });
           pushLog(`PAREGGIO! Piatto diviso: ${msg.split_winners.map(w => `${w.name} +${w.amount}`).join(' / ')}`);
         } else if (msg.winner_name) {
+          const netWin = Number(msg.winner_net ?? 0);
           setHandWinner({ is_split: false, name: msg.winner_name, seat: msg.winner_seat ?? null, amount: msg.winner_net ?? 0 });
           if (result.hand_description)
-            pushLog(`🏆 ${msg.winner_name} vince con ${result.hand_description} — +${result.pot_won}`);
-          else if (result.pot_won)
-            pushLog(`🏆 ${msg.winner_name} vince +${result.pot_won}`);
+            pushLog(`🏆 ${msg.winner_name} vince con ${result.hand_description} — +${netWin}`);
+          else if (netWin)
+            pushLog(`🏆 ${msg.winner_name} vince +${netWin}`);
         }
         handWinnerClearRef.current = setTimeout(() => setHandWinner(null), 4000);
 
@@ -574,7 +583,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
         break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, applyTableState, startCountdown, stopCountdown, pushLog, setErrorWithTTL, updateBalance, refreshUser]);
+  }, [user, isTournament, tournament, applyTableState, startCountdown, stopCountdown, pushLog, setErrorWithTTL, updateBalance, refreshUser]);
 
   // ── Invio con coda offline ────────────────────────────────────────────────
 

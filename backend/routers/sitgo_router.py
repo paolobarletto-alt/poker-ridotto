@@ -328,12 +328,9 @@ async def _start_tournament(tournament_id: uuid.UUID):
             tournament.status = "running"
             tournament.table_id = poker_table.id
             tournament.started_at = _now()
-            tournament.level_started_at = _now()
+            tournament.level_started_at = None
             game_manager.register_tournament(table_id, str(tournament_id))
             await db.commit()
-
-            timer_task = asyncio.create_task(_blind_level_timer(str(tournament_id), table_id))
-            _blind_timer_tasks[str(tournament_id)] = timer_task
 
             await game_manager.broadcast(
                 table_id,
@@ -362,6 +359,9 @@ async def _blind_level_timer(tournament_id: str, table_id: str):
             tournament = result.scalar_one_or_none()
         if tournament is None or tournament.status != "running":
             break
+        if tournament.level_started_at is None:
+            await asyncio.sleep(1)
+            continue
 
         schedule = tournament.blind_schedule or []
         current_level_idx = max(tournament.current_blind_level - 1, 0)
@@ -411,6 +411,27 @@ async def _blind_level_timer(tournament_id: str, table_id: str):
                 "next_level_in": level_data["duration_seconds"],
             },
         )
+
+
+async def ensure_sitgo_blinds_started(table_id: str) -> None:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(SitGoTournament).where(SitGoTournament.table_id == uuid.UUID(table_id)).with_for_update()
+        )
+        tournament = result.scalar_one_or_none()
+        if tournament is None or tournament.status != "running":
+            return
+
+        if tournament.level_started_at is None:
+            tournament.level_started_at = _now()
+            await db.commit()
+        else:
+            await db.rollback()
+
+    tid = str(tournament.id)
+    task = _blind_timer_tasks.get(tid)
+    if task is None or task.done():
+        _blind_timer_tasks[tid] = asyncio.create_task(_blind_level_timer(tid, table_id))
 
 
 async def handle_sitgo_hand_end(table_id: str, db: AsyncSession):
