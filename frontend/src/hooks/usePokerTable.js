@@ -528,6 +528,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
       case 'tournament_ended':
         setTournamentEnded({
           winner_username: msg.winner_username,
+          buy_in: msg.buy_in ?? 0,
           position_results: msg.position_results ?? [],
         });
         if (user?.id && Array.isArray(msg.position_results)) {

@@ -248,8 +248,13 @@ function TournamentEndOverlay({ result, currentUsername }) {
         background: 'rgba(10,10,10,0.8)',
         marginBottom: 32,
       }}>
-        {result.position_results?.map((r) => (
-          <div key={r.position} style={{
+        {result.position_results?.map((r) => {
+          const payout = Number(r.payout ?? 0);
+          const buyIn = Number(result.buy_in ?? 0);
+          const amount = payout > 0 ? payout : -buyIn;
+          const amountColor = amount > 0 ? '#4caf50' : amount < 0 ? '#e57373' : 'rgba(245,241,232,0.55)';
+          return (
+          <div key={`${r.position}-${r.username}`} style={{
             display: 'flex', alignItems: 'center', gap: 12,
             padding: '10px 16px',
             borderBottom: '1px solid rgba(212,175,55,0.07)',
@@ -264,11 +269,11 @@ function TournamentEndOverlay({ result, currentUsername }) {
             }}>
               {r.username}
             </span>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'rgba(245,241,232,0.55)' }}>
-              {(r.chips_at_end ?? 0).toLocaleString('it-IT')} chip
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: amountColor, fontWeight: 600 }}>
+              {amount > 0 ? '+' : ''}{amount.toLocaleString('it-IT')} chip
             </span>
           </div>
-        ))}
+        )})}
       </div>
 
       <GoldButton

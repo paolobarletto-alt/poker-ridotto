@@ -631,6 +631,7 @@ async def _finish_tournament(
             "type": "tournament_ended",
             "winner_username": winner_username,
             "prize_pool": tournament.prize_pool,
+            "buy_in": tournament.buy_in,
             "position_results": payload_results,
         },
     )
