@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -78,6 +78,122 @@ function ErrorBox({ message }) {
       fontFamily: 'Inter, sans-serif', lineHeight: 1.45,
     }}>
       {message}
+    </div>
+  );
+}
+
+function WelcomeBackground() {
+  const bokehOrbs = useMemo(
+    () => Array.from({ length: 14 }, (_, i) => ({
+      id: i,
+      size: 130 + ((i * 37) % 190),
+      left: (i * 17) % 110,
+      top: (i * 23) % 110,
+      opacity: 0.08 + ((i % 5) * 0.02),
+      blur: 34 + ((i * 7) % 52),
+      duration: 18 + ((i * 3) % 18),
+      delay: -(i * 2.1),
+      hue: i % 4 === 0 ? 'red' : 'gold',
+      keyframe: `welcome-bokeh-${i % 4}`,
+    })),
+    [],
+  );
+
+  const dustParticles = useMemo(
+    () => Array.from({ length: 26 }, (_, i) => ({
+      id: i,
+      left: (i * 13) % 100,
+      size: 1 + ((i * 5) % 3),
+      duration: 20 + ((i * 7) % 24),
+      delay: -(i * 1.7),
+      opacity: 0.22 + ((i % 4) * 0.1),
+    })),
+    [],
+  );
+
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        background: `
+          radial-gradient(ellipse at 28% 22%, rgba(44,27,14,0.95) 0%, rgba(10,7,5,0.72) 45%, transparent 68%),
+          radial-gradient(ellipse at 72% 78%, rgba(35,11,11,0.5) 0%, transparent 52%),
+          radial-gradient(ellipse 60% 58% at 50% 45%, #163224 0%, #0a1711 38%, #050505 78%)
+        `,
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          top: '42%',
+          left: '50%',
+          width: 1300,
+          height: 850,
+          transform: 'translate(-50%,-50%)',
+          background: 'radial-gradient(ellipse 52% 52% at center, rgba(212,175,55,0.22) 0%, rgba(212,175,55,0.08) 34%, transparent 68%)',
+          filter: 'blur(8px)',
+          animation: 'welcome-lamp-breathe 7.5s ease-in-out infinite',
+        }}
+      />
+
+      {bokehOrbs.map((orb) => (
+        <div
+          key={orb.id}
+          style={{
+            position: 'absolute',
+            left: `${orb.left}%`,
+            top: `${orb.top}%`,
+            width: orb.size,
+            height: orb.size,
+            borderRadius: '50%',
+            background: orb.hue === 'red'
+              ? 'radial-gradient(circle, rgba(208,78,78,0.65) 0%, rgba(140,30,30,0.16) 40%, transparent 72%)'
+              : 'radial-gradient(circle, rgba(246,214,132,0.78) 0%, rgba(212,175,55,0.2) 42%, transparent 72%)',
+            filter: `blur(${orb.blur}px)`,
+            opacity: orb.opacity,
+            mixBlendMode: 'screen',
+            animation: `${orb.keyframe} ${orb.duration}s ease-in-out ${orb.delay}s infinite`,
+          }}
+        />
+      ))}
+
+      {dustParticles.map((p) => (
+        <div
+          key={`dust-${p.id}`}
+          style={{
+            position: 'absolute',
+            left: `${p.left}%`,
+            bottom: '-5%',
+            width: p.size,
+            height: p.size,
+            borderRadius: '50%',
+            background: 'rgba(255,220,150,0.9)',
+            boxShadow: '0 0 6px rgba(255,220,150,0.55)',
+            opacity: p.opacity,
+            animation: `welcome-dust-float ${p.duration}s linear ${p.delay}s infinite`,
+          }}
+        />
+      ))}
+
+      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.2, mixBlendMode: 'overlay' }}>
+        <filter id="welcome-grain-noise">
+          <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="1" />
+          <feColorMatrix values="0 0 0 0 0.55  0 0 0 0 0.45  0 0 0 0 0.35  0 0 0 0.42 0" />
+        </filter>
+        <rect width="100%" height="100%" filter="url(#welcome-grain-noise)" />
+      </svg>
+
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'radial-gradient(ellipse at center, transparent 34%, rgba(0,0,0,0.84) 100%)',
+        }}
+      />
     </div>
   );
 }
@@ -200,14 +316,45 @@ export default function LoginPage() {
   return (
     <>
       {/* Spinner keyframe */}
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes welcome-lamp-breathe {
+          0%,100% { opacity: 0.78; transform: translate(-50%,-50%) scale(1); }
+          50%     { opacity: 1;    transform: translate(-50%,-50%) scale(1.05); }
+        }
+        @keyframes welcome-bokeh-0 {
+          0%,100% { transform: translate(0,0) scale(1); }
+          50% { transform: translate(30px,-26px) scale(1.12); }
+        }
+        @keyframes welcome-bokeh-1 {
+          0%,100% { transform: translate(0,0) scale(1.03); }
+          50% { transform: translate(-26px,30px) scale(0.96); }
+        }
+        @keyframes welcome-bokeh-2 {
+          0%,100% { transform: translate(0,0) scale(0.94); }
+          50% { transform: translate(20px,22px) scale(1.07); }
+        }
+        @keyframes welcome-bokeh-3 {
+          0%,100% { transform: translate(0,0) scale(1.06); }
+          50% { transform: translate(-34px,-18px) scale(0.98); }
+        }
+        @keyframes welcome-dust-float {
+          0%   { transform: translateY(108vh) translateX(0); opacity: 0; }
+          8%   { opacity: 1; }
+          88%  { opacity: 1; }
+          100% { transform: translateY(-12vh) translateX(32px); opacity: 0; }
+        }
+      `}</style>
 
       <div style={{
         minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'radial-gradient(ellipse at 40% 35%, #1a1008 0%, #050505 65%)',
+        position: 'relative',
+        overflow: 'hidden',
+        background: '#050505',
         padding: '40px 16px',
       }}>
-        <div style={{ width: '100%', maxWidth: 420 }}>
+        <WelcomeBackground />
+        <div style={{ width: '100%', maxWidth: 420, position: 'relative', zIndex: 2 }}>
 
           {/* Logo */}
           <div style={{ textAlign: 'center', marginBottom: 44 }}>
