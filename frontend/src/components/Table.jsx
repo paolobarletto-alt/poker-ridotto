@@ -1809,19 +1809,14 @@ export default function PokerTable({
                   position: 'absolute',
                   top: '45%',
                   left: '37.5%',
-                  transform: 'translate(-50%,-50%) rotate(-9deg)',
-                  width: 50,
-                  height: 72,
-                  opacity: 0.9,
+                  transform: 'translate(-50%,-50%)',
+                  width: 1,
+                  height: 1,
+                  opacity: 0,
                   pointerEvents: 'none',
-                  zIndex: 3,
+                  zIndex: 0,
                 }}
-              >
-                <Card card="back" size="md" cardBack={cardBack} />
-                <div style={{ position: 'absolute', inset: 0, transform: 'translate(4px,-3px)' }}>
-                  <Card card="back" size="md" cardBack={cardBack} />
-                </div>
-              </div>
+              />
 
               {/* Carte comuni */}
               <div ref={communityAnchorRef} style={{ position: 'absolute', top: '45%', left: '50%', transform: 'translate(-50%,-50%)', display: 'flex', gap: 5, zIndex: 2 }}>
