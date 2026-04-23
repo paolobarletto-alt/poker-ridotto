@@ -35,7 +35,7 @@ export function Sidebar({ user }) {
     { id: 'sitgo',   label: 'Sit & Go',      section: 'gioca' },
     { id: 'table',   label: 'Nessun tavolo', section: 'sessione', disabled: true },
     { id: 'profile', label: 'Profilo',       section: 'account' },
-    { id: 'race',    label: 'Race',          section: 'account' },
+    { id: 'race',    label: 'Race',          section: 'classifiche' },
     ...(user?.is_admin ? [{ id: 'admin', label: 'Admin', section: 'account', badge: 'ADM' }] : []),
   ];
 
@@ -49,8 +49,8 @@ export function Sidebar({ user }) {
     admin:   '/admin',
   };
 
-  const sections = ['gioca', 'sessione', 'account'];
-  const sectionLabels = { gioca: 'GIOCA', sessione: 'IN CORSO', account: 'ACCOUNT' };
+  const sections = ['gioca', 'sessione', 'classifiche', 'account'];
+  const sectionLabels = { gioca: 'GIOCA', sessione: 'IN CORSO', classifiche: 'CLASSIFICHE', account: 'ACCOUNT' };
 
   const isActive = (id) => {
     const target = ROUTE_MAP_LOCAL[id];
