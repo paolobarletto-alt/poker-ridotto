@@ -142,6 +142,14 @@ function SectionHeading({ overline, title, action }) {
   );
 }
 
+function SectionDivider() {
+  return (
+    <div style={{ margin: '24px 32px 0' }}>
+      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(212,175,55,0.45), transparent)' }} />
+    </div>
+  );
+}
+
 function OnlineUsersSection({ users, loading }) {
   if (loading) {
     return <div style={{ margin: '0 32px', display: 'flex', gap: 12 }}>{[1, 2, 3, 4].map((i) => <div key={i} style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(212,175,55,0.06)', animation: 'shimmer 1.4s ease-in-out infinite' }} />)}</div>;
@@ -377,6 +385,7 @@ export default function Lobby({ view = 'lobby' }) {
         <div style={{ padding: '10px 28px 20px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'rgba(245,241,232,0.45)', lineHeight: 1.6, borderBottom: '1px solid rgba(212,175,55,0.08)' }}>
           Gioca quando vuoi, siediti e alzati liberamente. Nessun buy-in fisso, nessun vincolo di tempo.
         </div>
+        <SectionDivider />
         <CashTable tables={cashTables} loading={tablesLoading} onOpenCreate={() => setCreateModal('cash')} />
         {modal}
       </div>
@@ -390,6 +399,7 @@ export default function Lobby({ view = 'lobby' }) {
         <div style={{ padding: '10px 28px 20px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'rgba(245,241,232,0.45)', lineHeight: 1.6, borderBottom: '1px solid rgba(212,175,55,0.08)' }}>
           Iscriviti, aspetta che il tavolo sia completo e gioca fino all'ultimo chip.
         </div>
+        <SectionDivider />
         <SitGoSection
           tournaments={sitgos}
           loading={sitgoLoading}
@@ -411,9 +421,11 @@ export default function Lobby({ view = 'lobby' }) {
 
       <SectionHeading overline={`ONLINE ORA · ${onlineUsers.length} ${onlineUsers.length === 1 ? 'GIOCATORE' : 'GIOCATORI'}`} title="Utenti online" />
       <OnlineUsersSection users={onlineUsers} loading={onlineLoading} />
+      <SectionDivider />
 
       <SectionHeading overline={`CASH GAME · ${cashTables.length} TAVOLI`} title="Tavoli Cash" action={<GoldButton variant="ghost" size="sm" onClick={() => navigate('/lobby/cash')}>Vedi tutti</GoldButton>} />
       <CashTable tables={cashTables} loading={tablesLoading} onOpenCreate={() => setCreateModal('cash')} />
+      <SectionDivider />
 
       <SectionHeading overline={`SIT & GO · ${sitgos.length} TORNEI`} title="Tornei Sit & Go" action={<GoldButton variant="ghost" size="sm" onClick={() => navigate('/lobby/sitgo')}>Vedi tutti</GoldButton>} />
       <SitGoSection
