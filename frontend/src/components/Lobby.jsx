@@ -32,6 +32,7 @@ function normalizeSitGo(row = {}) {
     prizePool: Number(row.prize_pool ?? 0),
     payoutStructure: Array.isArray(row.payout_structure) ? row.payout_structure : [],
     creatorUsername: row.creator_username ?? row.created_by_username ?? row.creator ?? '',
+    creatorId: row.created_by ?? row.creator_id ?? null,
     isRegistered: row.is_registered ?? row.registered ?? row.me_registered ?? null,
   };
 }
@@ -199,7 +200,7 @@ function CashTable({ tables, loading, onOpenCreate }) {
   );
 }
 
-function SitGoSection({ tournaments, loading, error, busyMap, isRegistered, onRegisterToggle, onOpenCreate }) {
+function SitGoSection({ tournaments, loading, error, busyMap, isRegistered, onRegisterToggle, onOpenCreate, currentUser }) {
   const navigate = useNavigate();
   const statusMeta = {
     registering: { label: 'In registrazione', color: 'rgba(212,175,55,0.9)' },
@@ -224,10 +225,15 @@ function SitGoSection({ tournaments, loading, error, busyMap, isRegistered, onRe
       </div>
       {tournaments.map((t, i) => {
         const registered = isRegistered(t);
+        const isCreator = (
+          (t.creatorId && currentUser?.id && String(t.creatorId) === String(currentUser.id)) ||
+          (t.creatorUsername && currentUser?.username && String(t.creatorUsername).toLowerCase() === String(currentUser.username).toLowerCase())
+        );
         const canEnterTable = t.status === 'running' && t.tableId;
         const canRegister = t.status === 'registering' || t.status === 'waiting';
         const busy = !!busyMap[t.id];
         const full = t.nRegistered >= t.maxSeats;
+        const showRegisterButton = canRegister && !(isCreator && registered);
         const registerDisabled = busy || (!registered && full);
         const sMeta = statusMeta[t.status] ?? { label: t.status, color: 'rgba(245,241,232,0.55)' };
         return (
@@ -248,7 +254,7 @@ function SitGoSection({ tournaments, loading, error, busyMap, isRegistered, onRe
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               {canEnterTable && <GoldButton size="sm" onClick={() => navigate(`/table/${t.tableId}`)}>Entra</GoldButton>}
-              {canRegister && (
+              {showRegisterButton && (
                 <GoldButton
                   size="sm"
                   variant={registered ? 'ghost' : 'solid'}
@@ -257,6 +263,11 @@ function SitGoSection({ tournaments, loading, error, busyMap, isRegistered, onRe
                 >
                   {busy ? '...' : registered ? 'Ritirati' : (full ? 'Pieno' : 'Iscriviti')}
                 </GoldButton>
+              )}
+              {canRegister && !showRegisterButton && (
+                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: 'rgba(245,241,232,0.55)', letterSpacing: '0.08em' }}>
+                  Già iscritto (creatore)
+                </span>
               )}
               {!canEnterTable && !canRegister && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: 'rgba(245,241,232,0.45)', letterSpacing: '0.08em' }}>Concluso</span>}
             </div>
@@ -277,6 +288,7 @@ export default function Lobby({ view = 'lobby' }) {
   const [busyMap, setBusyMap] = useState({});
   const [registrationState, setRegistrationState] = useState({});
   const [sitgoActionError, setSitgoActionError] = useState('');
+  const [uiError, setUiError] = useState('');
 
   const cashTables = useMemo(() => tables.filter((t) => String(t.table_type).toLowerCase() !== 'sitgo'), [tables]);
 
@@ -305,9 +317,25 @@ export default function Lobby({ view = 'lobby' }) {
   const isRegistered = useCallback((t) => {
     const explicit = t.isRegistered;
     if (explicit != null) return !!explicit;
+    const isCreator = (
+      (t.creatorId && user?.id && String(t.creatorId) === String(user.id)) ||
+      (t.creatorUsername && user?.username && String(t.creatorUsername).toLowerCase() === String(user.username).toLowerCase())
+    );
+    if (isCreator && Number(t.nRegistered || 0) > 0) return true;
     if (registrationState[t.id] != null) return !!registrationState[t.id];
     return false;
-  }, [registrationState]);
+  }, [registrationState, user?.id, user?.username]);
+
+  useEffect(() => {
+    const nextError = sitgoActionError || sitgoError || '';
+    if (!nextError) return;
+    setUiError(nextError);
+    const timeoutId = setTimeout(() => {
+      setUiError('');
+      setSitgoActionError('');
+    }, 3000);
+    return () => clearTimeout(timeoutId);
+  }, [sitgoActionError, sitgoError]);
 
   const handleRegisterToggle = useCallback(async (t, registered) => {
     if (!t?.id) return;
@@ -323,7 +351,10 @@ export default function Lobby({ view = 'lobby' }) {
       }
       await refreshSitGos();
     } catch (err) {
-      const message = err?.response?.data?.detail ?? 'Operazione non riuscita';
+      const raw = String(err?.response?.data?.detail ?? 'Operazione non riuscita');
+      const message = raw.includes('non accetta più iscrizioni')
+        ? 'Iscrizioni chiuse: il torneo è già partito'
+        : raw;
       setSitgoActionError(message);
     } finally {
       setBusyMap((prev) => ({ ...prev, [t.id]: false }));
@@ -361,10 +392,11 @@ export default function Lobby({ view = 'lobby' }) {
         <SitGoSection
           tournaments={sitgos}
           loading={sitgoLoading}
-          error={sitgoActionError || sitgoError}
+          error={uiError}
           busyMap={busyMap}
           isRegistered={isRegistered}
           onRegisterToggle={handleRegisterToggle}
+          currentUser={user}
           onOpenCreate={() => setCreateModal('sitgo')}
         />
         {modal}
@@ -386,10 +418,11 @@ export default function Lobby({ view = 'lobby' }) {
       <SitGoSection
         tournaments={sitgos}
         loading={sitgoLoading}
-        error={sitgoActionError || sitgoError}
+        error={uiError}
         busyMap={busyMap}
         isRegistered={isRegistered}
         onRegisterToggle={handleRegisterToggle}
+        currentUser={user}
         onOpenCreate={() => setCreateModal('sitgo')}
       />
 
