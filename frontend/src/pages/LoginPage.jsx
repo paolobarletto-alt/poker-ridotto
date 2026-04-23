@@ -111,6 +111,23 @@ function WelcomeBackground() {
     [],
   );
 
+  const floatingChips = useMemo(
+    () => Array.from({ length: 11 }, (_, i) => ({
+      id: i,
+      size: 62 + ((i * 11) % 34),
+      left: 4 + ((i * 9) % 92),
+      top: 8 + ((i * 17) % 82),
+      depth: i % 3 === 0 ? 'front' : (i % 3 === 1 ? 'mid' : 'back'),
+      duration: 16 + ((i * 4) % 12),
+      delay: -(i * 1.9),
+      tilt: -22 + ((i * 9) % 45),
+      spinDuration: 8 + ((i * 2) % 8),
+      color: i % 4 === 0 ? '#8a1a28' : i % 4 === 1 ? '#0f3d2a' : i % 4 === 2 ? '#1a1a1a' : '#1a1f3a',
+      accent: i % 3 === 0 ? '#D4AF37' : '#f5f1e8',
+    })),
+    [],
+  );
+
   return (
     <div
       aria-hidden="true"
@@ -159,6 +176,50 @@ function WelcomeBackground() {
             animation: `${orb.keyframe} ${orb.duration}s ease-in-out ${orb.delay}s infinite`,
           }}
         />
+      ))}
+
+      {floatingChips.map((chip) => (
+        <div
+          key={`chip-${chip.id}`}
+          style={{
+            position: 'absolute',
+            left: `${chip.left}%`,
+            top: `${chip.top}%`,
+            width: chip.size,
+            height: chip.size,
+            marginLeft: -(chip.size / 2),
+            marginTop: -(chip.size / 2),
+            opacity: chip.depth === 'front' ? 0.5 : chip.depth === 'mid' ? 0.4 : 0.3,
+            filter: chip.depth === 'front' ? 'drop-shadow(0 10px 24px rgba(0,0,0,0.7))' : 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))',
+            animation: `welcome-chip-float ${chip.duration}s ease-in-out ${chip.delay}s infinite`,
+            transformStyle: 'preserve-3d',
+            zIndex: chip.depth === 'front' ? 2 : 1,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: '50%',
+              '--chip-tilt': `${chip.tilt}deg`,
+              animation: `welcome-chip-spin ${chip.spinDuration}s linear ${chip.delay}s infinite`,
+              background: `conic-gradient(${chip.color} 0deg 44deg, ${chip.accent} 44deg 90deg, ${chip.color} 90deg 134deg, ${chip.accent} 134deg 180deg, ${chip.color} 180deg 224deg, ${chip.accent} 224deg 270deg, ${chip.color} 270deg 314deg, ${chip.accent} 314deg 360deg)`,
+              border: '1px solid rgba(0,0,0,0.45)',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                inset: '16%',
+                borderRadius: '50%',
+                background: `radial-gradient(circle at 34% 30%, rgba(255,255,255,0.22) 0%, ${chip.color} 58%, rgba(0,0,0,0.4) 100%)`,
+                border: `1px solid ${chip.accent === '#D4AF37' ? 'rgba(212,175,55,0.65)' : 'rgba(245,241,232,0.55)'}`,
+              }}
+            />
+          </div>
+        </div>
       ))}
 
       {dustParticles.map((p) => (
@@ -343,6 +404,14 @@ export default function LoginPage() {
           8%   { opacity: 1; }
           88%  { opacity: 1; }
           100% { transform: translateY(-12vh) translateX(32px); opacity: 0; }
+        }
+        @keyframes welcome-chip-float {
+          0%,100% { transform: translate3d(0,0,0) scale(1); }
+          50% { transform: translate3d(16px,-18px,0) scale(1.04); }
+        }
+        @keyframes welcome-chip-spin {
+          from { transform: rotateX(var(--chip-tilt, 0deg)) rotateY(0deg); }
+          to { transform: rotateX(var(--chip-tilt, 0deg)) rotateY(360deg); }
         }
       `}</style>
 
