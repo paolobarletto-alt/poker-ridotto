@@ -79,9 +79,11 @@ function NumInput({ label, value, onChange, min, max, step = 1, readOnly = false
   );
 }
 
-export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash' }) {
+export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash', forcedType = null }) {
   const navigate = useNavigate();
-  const [type, setType] = useState(defaultType === 'sitgo' ? 'sitgo' : 'cash');
+  const normalizedForcedType = forcedType === 'sitgo' ? 'sitgo' : forcedType === 'cash' ? 'cash' : null;
+  const initialType = normalizedForcedType ?? (defaultType === 'sitgo' ? 'sitgo' : 'cash');
+  const [type, setType] = useState(initialType);
   const [name, setName] = useState('');
   const [minPlayers, setMinPlayers] = useState(2);
   const [maxSeats, setMaxSeats] = useState(6);
@@ -101,6 +103,11 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
   const buyinPreview = useMemo(() => Math.max(100, sitgoBuyIn), [sitgoBuyIn]);
   const payoutPreview = useMemo(() => SITGO_PAYOUT[maxSeats] ?? [100], [maxSeats]);
   const prizePoolPreview = useMemo(() => buyinPreview * maxSeats, [buyinPreview, maxSeats]);
+
+  useEffect(() => {
+    if (!normalizedForcedType) return;
+    setType(normalizedForcedType);
+  }, [normalizedForcedType]);
 
   useEffect(() => {
     if (maxSeats > maxSeatCap) setMaxSeats(maxSeatCap);
@@ -211,26 +218,28 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
         </div>
 
         <div style={css.body}>
-          <div>
-            <div style={css.sectionTitle}>TIPO DI GIOCO</div>
-            <div style={{ display: 'flex', gap: 0 }}>
-              {[['cash', 'Cash Game'], ['sitgo', 'Sit & Go']].map(([val, lbl]) => (
-                <button
-                  key={val}
-                  onClick={() => setType(val)}
-                  style={{
-                    flex: 1, padding: '11px 0',
-                    background: type === val ? 'rgba(212,175,55,0.15)' : 'transparent',
-                    border: `1px solid ${type === val ? '#D4AF37' : 'rgba(212,175,55,0.2)'}`,
-                    color: type === val ? '#D4AF37' : 'rgba(245,241,232,0.5)',
-                    fontSize: 11, fontFamily: 'Inter, sans-serif', letterSpacing: '0.12em', cursor: 'pointer',
-                  }}
-                >
-                  {lbl}
-                </button>
-              ))}
+          {!normalizedForcedType && (
+            <div>
+              <div style={css.sectionTitle}>TIPO DI GIOCO</div>
+              <div style={{ display: 'flex', gap: 0 }}>
+                {[['cash', 'Cash Game'], ['sitgo', 'Sit & Go']].map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    onClick={() => setType(val)}
+                    style={{
+                      flex: 1, padding: '11px 0',
+                      background: type === val ? 'rgba(212,175,55,0.15)' : 'transparent',
+                      border: `1px solid ${type === val ? '#D4AF37' : 'rgba(212,175,55,0.2)'}`,
+                      color: type === val ? '#D4AF37' : 'rgba(245,241,232,0.5)',
+                      fontSize: 11, fontFamily: 'Inter, sans-serif', letterSpacing: '0.12em', cursor: 'pointer',
+                    }}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div>
             <div style={css.sectionTitle}>STRUTTURA</div>

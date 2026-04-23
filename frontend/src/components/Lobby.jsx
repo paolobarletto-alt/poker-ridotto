@@ -365,7 +365,8 @@ export default function Lobby({ view = 'lobby' }) {
     <CreateTableModal
       isOpen
       onClose={() => setCreateModal(null)}
-      defaultType={createModal === 'table' ? 'cash' : createModal}
+      defaultType={createModal}
+      forcedType={createModal}
     />
   );
 
