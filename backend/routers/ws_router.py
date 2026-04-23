@@ -33,7 +33,7 @@ from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
 from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, PokerTable, SitGoRegistration, SitGoTournament, TableSeat, User
 from poker_engine import AzioneGioco, FaseGioco, StatoSeat
-from routers.sitgo_router import handle_sitgo_hand_end
+from routers.sitgo_router import _finish_tournament, handle_sitgo_hand_end
 
 logger = logging.getLogger("ridotto.ws_router")
 
@@ -1056,15 +1056,14 @@ async def _handle_leave_seat(
         await ws.send_json({"type": "error", "message": "Non sei seduto a questo tavolo"})
         return
     tournament = None
+    tournament_running = False
     if db_table.table_type == "sitgo":
         async with AsyncSessionLocal() as db:
             t_result = await db.execute(
                 select(SitGoTournament).where(SitGoTournament.table_id == db_table.id)
             )
             tournament = t_result.scalar_one_or_none()
-        if tournament and tournament.status != "finished":
-            await ws.send_json({"type": "error", "message": "Nel Sit&Go puoi lasciare il tavolo solo a torneo concluso"})
-            return
+        tournament_running = bool(tournament and tournament.status == "running")
 
     seat_number = game_manager.seat_for_user(table_id, user_id)
 
@@ -1088,6 +1087,9 @@ async def _handle_leave_seat(
     game_manager.unregister_seat(table_id, user_id)
 
     # DB: restituisci stack e rimuovi TableSeat
+    eliminated_now = False
+    winner_user_id = None
+    winner_stack = 0
     async with AsyncSessionLocal() as db:
         seat_res = await db.execute(
             select(TableSeat).where(
@@ -1121,6 +1123,29 @@ async def _handle_leave_seat(
             )
             reg = reg_result.scalar_one_or_none()
             if reg:
+                if tournament_running and reg.final_position is None:
+                    active_regs_result = await db.execute(
+                        select(func.count()).select_from(SitGoRegistration).where(
+                            SitGoRegistration.tournament_id == tournament.id,
+                            SitGoRegistration.final_position.is_(None),
+                        )
+                    )
+                    active_regs = active_regs_result.scalar() or 0
+                    if active_regs > 0:
+                        reg.final_position = active_regs
+                        reg.chips_at_end = 0
+                        eliminated_now = True
+
+                    remaining_regs_result = await db.execute(
+                        select(SitGoRegistration).where(
+                            SitGoRegistration.tournament_id == tournament.id,
+                            SitGoRegistration.final_position.is_(None),
+                        )
+                    )
+                    remaining_regs = remaining_regs_result.scalars().all()
+                    if len(remaining_regs) == 1:
+                        winner_user_id = str(remaining_regs[0].user_id)
+                        winner_stack = game_manager.get_player_stack(table_id, winner_user_id) or 0
                 final_position = reg.final_position
                 payout_awarded = reg.payout_awarded
         open_session = await _get_open_session(db, db_table.id, user.id)
@@ -1132,9 +1157,39 @@ async def _handle_leave_seat(
             open_session.last_activity_at = _now_utc()
             open_session.status = "closed"
             open_session.close_reason = "left_table"
-        await db.commit()
+        if db_table.table_type == "sitgo" and tournament_running and winner_user_id:
+            await db.flush()
+            await _finish_tournament(
+                tournament_id=str(tournament.id),
+                winner_user_id=winner_user_id,
+                winner_stack=winner_stack,
+                table_id=table_id,
+                db=db,
+            )
+            reg_result = await db.execute(
+                select(SitGoRegistration).where(
+                    SitGoRegistration.tournament_id == tournament.id,
+                    SitGoRegistration.user_id == user.id,
+                )
+            )
+            reg = reg_result.scalar_one_or_none()
+            if reg:
+                final_position = reg.final_position
+                payout_awarded = reg.payout_awarded
+        else:
+            await db.commit()
 
     display = user.display_name or user.username
+    if eliminated_now and final_position:
+        await game_manager.broadcast(
+            table_id,
+            {
+                "type": "player_eliminated",
+                "seat": seat_number,
+                "position": final_position,
+                "username": user.username,
+            },
+        )
     await game_manager.broadcast(table_id, {
         "type": "player_left",
         "seat": seat_number,
@@ -1159,7 +1214,7 @@ async def _handle_leave_seat(
 
     # Torna a "waiting" se non ci sono abbastanza giocatori
     active = game.players_active_count()
-    if active < db_table.min_players and not game.hand_in_progress():
+    if db_table.table_type != "sitgo" and active < db_table.min_players and not game.hand_in_progress():
         async with AsyncSessionLocal() as db:
             tbl = await db.get(PokerTable, db_table.id)
             if tbl:

@@ -38,11 +38,17 @@ function LeaveOverlay({ step, pnl, isTournament, tournamentResult, onConfirm, on
         {step === 'confirm' ? (
           <>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#F5F1E8', fontStyle: 'italic', marginBottom: 10 }}>
-              Abbandonare il tavolo?
+              {isTournament ? 'Sicuro di abbandonare torneo?' : 'Abbandonare il tavolo?'}
             </div>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.5)', letterSpacing: '0.06em', marginBottom: 32, lineHeight: 1.6 }}>
-              Se hai chips in gioco in una mano in corso,<br />
-              quelle rimarranno nel piatto.
+              {isTournament ? (
+                <>Verrai eliminato immediatamente!</>
+              ) : (
+                <>
+                  Se hai chips in gioco in una mano in corso,<br />
+                  quelle rimarranno nel piatto.
+                </>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
               <GoldButton onClick={onCancel} variant="ghost" size="md">Annulla</GoldButton>
@@ -52,7 +58,7 @@ function LeaveOverlay({ step, pnl, isTournament, tournamentResult, onConfirm, on
         ) : isTournament ? (
           <>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#F5F1E8', fontStyle: 'italic', marginBottom: 24 }}>
-              Torneo terminato
+              Uscita dal torneo
             </div>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.45)', letterSpacing: '0.12em', marginBottom: 10 }}>
               POSIZIONE FINALE
@@ -154,7 +160,7 @@ export default function TablePage() {
   // Utente conferma abbandono
   const handleLeaveConfirm = useCallback(() => {
     if (isTournament) {
-      if (tournamentEnded && mySeat !== null) {
+      if (mySeat !== null) {
         leaveSeat();
       }
       setLeaveStep('summary');
@@ -166,7 +172,7 @@ export default function TablePage() {
     setSessionPnl(pnl);
     leaveSeat();
     setLeaveStep('summary');
-  }, [isTournament, tournamentEnded, mySeat, leaveSeat, tableState, sessionBuyin]);
+  }, [isTournament, mySeat, leaveSeat, tableState, sessionBuyin]);
 
   const handleGoLobby = useCallback(() => {
     navigate('/lobby');
