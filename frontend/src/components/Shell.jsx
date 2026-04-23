@@ -61,7 +61,7 @@ export function Sidebar({ user }) {
     <div style={{
       width: 240, height: '100%', flexShrink: 0,
       background: 'linear-gradient(180deg, #0a0a0a 0%, #070707 100%)',
-      borderRight: '1px solid rgba(212,175,55,0.08)',
+      borderRight: '2px solid rgba(212,175,55,0.22)',
       display: 'flex', flexDirection: 'column',
       padding: '14px 0',
     }}>
@@ -70,7 +70,7 @@ export function Sidebar({ user }) {
       </div>
 
       {/* Logo */}
-      <div style={{ padding: '0 20px 24px', borderBottom: '1px solid rgba(212,175,55,0.08)' }}>
+      <div style={{ padding: '0 20px 24px', borderBottom: '1.5px solid rgba(212,175,55,0.18)' }}>
         <div style={{
           fontFamily: 'Playfair Display, serif', fontSize: 26, fontWeight: 700,
           color: '#D4AF37', letterSpacing: '-0.02em', lineHeight: 1,
@@ -164,7 +164,7 @@ export function TopBar({ title, subtitle, actions }) {
   return (
     <div style={{
       padding: '22px 32px 18px', display: 'flex', alignItems: 'flex-end',
-      justifyContent: 'space-between', borderBottom: '1px solid rgba(212,175,55,0.08)',
+      justifyContent: 'space-between', borderBottom: '2px solid rgba(212,175,55,0.22)',
     }}>
       <div>
         <div style={{

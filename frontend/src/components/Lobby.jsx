@@ -145,7 +145,7 @@ function SectionHeading({ overline, title, action }) {
 function SectionDivider() {
   return (
     <div style={{ margin: '24px 32px 0' }}>
-      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(212,175,55,0.45), transparent)' }} />
+      <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(212,175,55,0.55), transparent)' }} />
     </div>
   );
 }
