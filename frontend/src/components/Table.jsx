@@ -251,7 +251,7 @@ function TournamentEndOverlay({ result, currentUsername }) {
         {result.position_results?.map((r) => {
           const payout = Number(r.payout ?? 0);
           const buyIn = Number(result.buy_in ?? 0);
-          const amount = payout > 0 ? payout : -buyIn;
+          const amount = payout - buyIn;
           const amountColor = amount > 0 ? '#4caf50' : amount < 0 ? '#e57373' : 'rgba(245,241,232,0.55)';
           return (
           <div key={`${r.position}-${r.username}`} style={{
