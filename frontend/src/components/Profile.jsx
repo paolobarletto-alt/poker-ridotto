@@ -72,49 +72,6 @@ function PLChart({ data }) {
   );
 }
 
-// ————— Stat tile —————
-function StatTile({ label, value, sub, accent, wide, loading, tooltip }) {
-  const [showTip, setShowTip] = useState(false);
-  return (
-    <div
-      title={tooltip || undefined}
-      style={{
-        gridColumn: wide ? 'span 2' : undefined,
-        padding: '18px 20px',
-        border: '1px solid rgba(212,175,55,0.12)',
-        background: accent ? 'linear-gradient(180deg, rgba(212,175,55,0.08), transparent)' : 'transparent',
-        position: 'relative', cursor: tooltip ? 'help' : 'default',
-      }}
-      onMouseEnter={() => tooltip && setShowTip(true)}
-      onMouseLeave={() => setShowTip(false)}
-    >
-      <div style={{ fontSize: 9.5, letterSpacing: '0.22em', color: 'rgba(245,241,232,0.5)', fontWeight: 600, marginBottom: 8, fontFamily: 'Inter, sans-serif' }}>
-        {label}
-      </div>
-      {loading
-        ? <Skel w={60} h={26} />
-        : <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 26, fontWeight: 500, color: accent ? '#D4AF37' : '#F5F1E8', letterSpacing: '-0.01em', lineHeight: 1 }}>
-            {value}
-          </div>
-      }
-      {sub && !loading && (
-        <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(245,241,232,0.55)', fontFamily: 'Inter, sans-serif' }}>{sub}</div>
-      )}
-      {showTip && tooltip && (
-        <div style={{
-          position: 'absolute', bottom: '105%', left: '50%', transform: 'translateX(-50%)',
-          background: '#1a1a1a', border: '1px solid rgba(212,175,55,0.3)',
-          color: 'rgba(245,241,232,0.8)', fontSize: 11, padding: '6px 10px',
-          whiteSpace: 'nowrap', zIndex: 50, fontFamily: 'Inter, sans-serif',
-          pointerEvents: 'none',
-        }}>
-          {tooltip}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ————— Profile —————
 export default function Profile() {
   const { user, refreshUser, logout } = useAuth();
@@ -197,7 +154,6 @@ export default function Profile() {
   })();
 
   const fmt = (n) => typeof n === 'number' ? n.toLocaleString('it-IT') : '—';
-  const fmtStat = (v, decimals = 1) => v == null ? null : typeof v === 'number' ? v.toFixed(decimals) : v;
   const memberSince = user?.created_at
     ? new Date(user.created_at).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
     : '';
@@ -206,8 +162,6 @@ export default function Profile() {
   const displayName = user?.display_name || user?.username || '';
   const balance = user?.chips_balance ?? 0;
   const netResult = statsData?.net_result ?? null;
-
-  const TOOLTIP_LOW = 'Servono almeno 20 mani';
 
   return (
     <div style={{ paddingBottom: 40 }}>
@@ -271,44 +225,6 @@ export default function Profile() {
             </div>
           </div>
           {loading ? <Skel w="100%" h={170} /> : <PLChart data={plData} />}
-        </div>
-      </div>
-
-      {/* Stats grid */}
-      <div style={{ padding: '26px 32px', borderBottom: '1px solid rgba(212,175,55,0.08)' }}>
-        <div style={{ fontSize: 10, letterSpacing: '0.22em', color: '#D4AF37', marginBottom: 14 }}>STATISTICHE LIFETIME</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0, border: '1px solid rgba(212,175,55,0.08)' }}>
-          <StatTile label="MANI GIOCATE" value={fmt(statsData?.total_hands)} sub="preflop visti" loading={loading} />
-          <StatTile label="WIN RATE"
-            value={fmtStat(statsData?.win_rate) != null ? `${fmtStat(statsData?.win_rate)}%` : '—'}
-            sub="mani vinte allo showdown"
-            tooltip={statsData?.win_rate == null && !loading ? TOOLTIP_LOW : undefined}
-            loading={loading} />
-          <StatTile label="PIATTO PIÙ GROSSO VINTO"
-            value={statsData?.biggest_pot != null ? `${fmt(statsData.biggest_pot)} chips` : '—'}
-            accent loading={loading} />
-          <StatTile label="RISULTATO NETTO"
-            value={netResult != null ? `${netResult >= 0 ? '+' : ''}${fmt(netResult)}` : '—'}
-            accent={netResult != null && netResult >= 0}
-            loading={loading} />
-          <StatTile label="VPIP"
-            value={fmtStat(statsData?.vpip) != null ? `${fmtStat(statsData?.vpip)}%` : '—'}
-            sub="volontariamente nel pot preflop"
-            tooltip={statsData?.vpip == null && !loading ? TOOLTIP_LOW : undefined}
-            loading={loading} />
-          <StatTile label="PFR"
-            value={fmtStat(statsData?.pfr) != null ? `${fmtStat(statsData?.pfr)}%` : '—'}
-            sub="preflop raise frequency"
-            tooltip={statsData?.pfr == null && !loading ? TOOLTIP_LOW : undefined}
-            loading={loading} />
-          <StatTile label="AGGRESSION FACTOR"
-            value={fmtStat(statsData?.af, 2) ?? '—'}
-            sub={statsData?.af != null ? (statsData.af < 1.5 ? 'passivo' : statsData.af < 3 ? 'bilanciato' : 'aggressivo') : undefined}
-            tooltip={statsData?.af == null && !loading ? TOOLTIP_LOW : undefined}
-            loading={loading} />
-          <StatTile label="SESSIONI GIOCATE"
-            value={gameHistory != null ? fmt(gameHistory.length) : '—'}
-            loading={loading} />
         </div>
       </div>
 
