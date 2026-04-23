@@ -104,15 +104,13 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
 
   useEffect(() => {
     if (maxSeats > maxSeatCap) setMaxSeats(maxSeatCap);
-    if (minPlayers > maxSeatCap) setMinPlayers(maxSeatCap);
-    if (maxSeats < minPlayers) setMaxSeats(minPlayers);
-  }, [maxSeats, minPlayers, maxSeatCap]);
-
-  useEffect(() => {
-    if (type === 'sitgo' && minPlayers !== maxSeats) {
+    if (type === 'cash') {
+      if (minPlayers > maxSeatCap) setMinPlayers(maxSeatCap);
+      if (maxSeats < minPlayers) setMaxSeats(minPlayers);
+    } else if (minPlayers !== maxSeats) {
       setMinPlayers(maxSeats);
     }
-  }, [type, minPlayers, maxSeats]);
+  }, [type, maxSeats, minPlayers, maxSeatCap]);
 
   useEffect(() => {
     if (minBuyin < bb * 10) setMinBuyin(bb * 10);
