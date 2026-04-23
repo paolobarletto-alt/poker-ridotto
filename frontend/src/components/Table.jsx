@@ -805,9 +805,13 @@ export default function PokerTable({
 
   const handleSeatClick = useCallback((idx) => {
     if (mySeat !== null) return; // già seduto
+    if (isTournament) {
+      joinSeat?.(idx);
+      return;
+    }
     setSelectedSeat(idx);
     setShowBuyin(true);
-  }, [mySeat]);
+  }, [isTournament, joinSeat, mySeat]);
 
   // ── Info header ───────────────────────────────────────────────────────────
   const blindsLabel  = tableConfig ? `€${tableConfig.small_blind}/${tableConfig.big_blind}` : '–/–';
@@ -1029,7 +1033,7 @@ export default function PokerTable({
         <div style={{ width: 262, flexShrink: 0, borderLeft: '1px solid rgba(212,175,55,0.1)', background: 'rgba(0,0,0,0.28)', display: 'flex', flexDirection: 'column' }}>
 
           {/* ── Saldo profilo + ricarica ────────────────────────────────── */}
-          {mySeat !== null && (
+          {mySeat !== null && !isTournament && (
             <RebuyWidget
               profileBalance={profileBalance}
               myStack={myStack}
@@ -1146,7 +1150,7 @@ export default function PokerTable({
       </div>
 
       {/* ── BuyinDialog ─────────────────────────────────────────────────── */}
-      {showBuyin && selectedSeat !== null && (
+      {!isTournament && showBuyin && selectedSeat !== null && (
         <BuyinDialog
           isOpen={true}
           seat={selectedSeat}

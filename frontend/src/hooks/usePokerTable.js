@@ -18,7 +18,7 @@
  * API:
  *   sendAction(action, amount?)  — con coda offline
  *   sendChat(message)
- *   joinSeat(seat, buyin)
+ *   joinSeat(seat, buyin?)
  *   leaveSeat()
  *   onChatMessage callback (passato come opzione)
  */
@@ -88,6 +88,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
   const [eliminatedPlayers, setEliminatedPlayers] = useState([]);
   const [tournamentEnded,   setTournamentEnded]   = useState(null);
   const [latestEliminated,  setLatestEliminated]  = useState(null);
+  const [tournamentResult,  setTournamentResult]  = useState(null);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const wsRef             = useRef(null);
@@ -427,6 +428,12 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
       case 'player_left':
         if (msg.username === user?.username) {
           setMySeat(null); setMyCards([]); setSessionBuyin(0);
+          if (msg.final_position != null) {
+            setTournamentResult({
+              position: msg.final_position,
+              payout: msg.payout_awarded ?? 0,
+            });
+          }
           // Aggiorna saldo nel contesto auth dopo il cashout
           refreshUser();
         }
@@ -520,9 +527,18 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
       // ── Torneo concluso ──────────────────────────────────────────────────
       case 'tournament_ended':
         setTournamentEnded({
-          winner_username:  msg.winner_username,
+          winner_username: msg.winner_username,
           position_results: msg.position_results ?? [],
         });
+        if (user?.id && Array.isArray(msg.position_results)) {
+          const mine = msg.position_results.find((r) => r.user_id === user.id);
+          if (mine) {
+            setTournamentResult({
+              position: mine.position ?? null,
+              payout: mine.payout ?? 0,
+            });
+          }
+        }
         pushLog(`Torneo concluso! Vincitore: ${msg.winner_username}`);
         break;
 
@@ -675,7 +691,11 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
     [_send]
   );
   const joinSeat = useCallback(
-    (seat, buyin) => _send({ type: 'join_seat', seat, buyin }),
+    (seat, buyin) => {
+      const payload = { type: 'join_seat', seat };
+      if (buyin != null) payload.buyin = buyin;
+      _send(payload);
+    },
     [_send]
   );
   const leaveSeat = useCallback(
@@ -711,6 +731,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
     blindLevelEndsAt,
     eliminatedPlayers,
     tournamentEnded,
+    tournamentResult,
     latestEliminated,
     // Azioni
     sendAction,

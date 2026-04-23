@@ -31,7 +31,7 @@ from auth import get_current_user
 from config import settings
 from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
-from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, PokerTable, SitGoTournament, TableSeat, User
+from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, PokerTable, SitGoRegistration, SitGoTournament, TableSeat, User
 from poker_engine import AzioneGioco, FaseGioco, StatoSeat
 from routers.sitgo_router import handle_sitgo_hand_end
 
@@ -794,16 +794,145 @@ async def _handle_join_seat(
     if game_manager.is_seated(table_id, user_id):
         await ws.send_json({"type": "error", "message": "Sei già seduto a questo tavolo"})
         return
-    if db_table.table_type == "sitgo":
-        await ws.send_json({"type": "error", "message": "Nei Sit&Go i posti sono gestiti automaticamente dal torneo"})
-        return
 
     seat_number = msg.get("seat")
-    buyin = msg.get("buyin")
-
     if not isinstance(seat_number, int) or not (0 <= seat_number < db_table.max_seats):
         await ws.send_json({"type": "error", "message": f"Posto non valido (0–{db_table.max_seats - 1})"})
         return
+
+    if db_table.table_type == "sitgo":
+        async with AsyncSessionLocal() as db:
+            t_result = await db.execute(
+                select(SitGoTournament).where(SitGoTournament.table_id == db_table.id)
+            )
+            tournament = t_result.scalar_one_or_none()
+            if tournament is None:
+                await ws.send_json({"type": "error", "message": "Torneo Sit&Go non trovato"})
+                return
+            if tournament.status != "running":
+                await ws.send_json({"type": "error", "message": "Il torneo non è pronto per il seat-in"})
+                return
+
+            reg_result = await db.execute(
+                select(SitGoRegistration).where(
+                    SitGoRegistration.tournament_id == tournament.id,
+                    SitGoRegistration.user_id == user.id,
+                )
+            )
+            registration = reg_result.scalar_one_or_none()
+            if registration is None:
+                await ws.send_json({"type": "error", "message": "Non sei registrato a questo Sit&Go"})
+                return
+            if registration.final_position is not None:
+                await ws.send_json({"type": "error", "message": "Sei già eliminato da questo torneo"})
+                return
+
+            if game_manager.user_for_seat(table_id, seat_number) is not None:
+                await ws.send_json({"type": "error", "message": f"Il posto {seat_number} è già occupato"})
+                return
+
+            existing = await db.execute(
+                select(TableSeat).where(
+                    TableSeat.table_id == db_table.id,
+                    TableSeat.seat_number == seat_number,
+                )
+            )
+            if existing.scalar_one_or_none():
+                await ws.send_json({"type": "error", "message": f"Il posto {seat_number} è già occupato"})
+                return
+
+            existing_user_seat = await db.execute(
+                select(TableSeat).where(
+                    TableSeat.table_id == db_table.id,
+                    TableSeat.user_id == user.id,
+                )
+            )
+            if existing_user_seat.scalar_one_or_none():
+                await ws.send_json({"type": "error", "message": "Sei già seduto a questo tavolo"})
+                return
+
+            buyin = int(tournament.starting_chips)
+            user_db = await db.get(User, user.id)
+            if user_db is None:
+                await ws.send_json({"type": "error", "message": "Utente non trovato"})
+                return
+
+            if registration.buy_in_amount <= 0:
+                if user_db.chips_balance < tournament.buy_in:
+                    await ws.send_json({"type": "error", "message": "Saldo insufficiente per il buy-in Sit&Go"})
+                    return
+                user_db.chips_balance -= tournament.buy_in
+                registration.buy_in_amount = tournament.buy_in
+                tournament.prize_pool += tournament.buy_in
+                db.add(ChipsLedger(
+                    user_id=user.id,
+                    amount=-tournament.buy_in,
+                    balance_after=user_db.chips_balance,
+                    reason="sitgo_buyin",
+                    game_id=tournament.id,
+                    description=f"Buy-in Sit&Go '{tournament.name}'",
+                ))
+
+            db.add(
+                TableSeat(
+                    table_id=db_table.id,
+                    user_id=user.id,
+                    seat_number=seat_number,
+                    stack=buyin,
+                    status="active",
+                )
+            )
+            open_session = await _get_open_session(db, db_table.id, user.id)
+            if open_session:
+                open_session.seat_number = seat_number
+                open_session.current_stack = buyin
+                open_session.last_activity_at = _now_utc()
+            else:
+                db.add(PlayerGameSession(
+                    user_id=user.id,
+                    table_id=db_table.id,
+                    table_name=db_table.name,
+                    table_type="sitgo",
+                    seat_number=seat_number,
+                    total_buyin=registration.buy_in_amount,
+                    current_stack=buyin,
+                    result_chips=0,
+                    hands_played=0,
+                    status="open",
+                    started_at=_now_utc(),
+                    last_activity_at=_now_utc(),
+                ))
+            await db.commit()
+
+        display = user.display_name or user.username
+        game.aggiungi_giocatore(user_id, display, buyin)
+        game_manager.register_seat(table_id, user_id, seat_number)
+
+        await game_manager.broadcast(table_id, {
+            "type": "player_joined",
+            "seat": seat_number,
+            "user_id": user_id,
+            "username": user.username,
+            "display_name": display,
+            "stack": buyin,
+        })
+        await game_manager.broadcast_state(table_id)
+
+        seated = game.players_active_count()
+        if not game.hand_in_progress() and game.num_mano == 0:
+            if seated >= db_table.max_seats:
+                asyncio.create_task(_delayed_start_hand(table_id, db_table, game, delay=3))
+            else:
+                await game_manager.broadcast(
+                    table_id,
+                    {
+                        "type": "waiting_players",
+                        "needed": max(0, db_table.max_seats - seated),
+                    },
+                )
+        return
+
+    buyin = msg.get("buyin")
     if not isinstance(buyin, (int, float)) or buyin <= 0:
         await ws.send_json({"type": "error", "message": "Buy-in non valido"})
         return
@@ -890,6 +1019,7 @@ async def _handle_join_seat(
     await game_manager.broadcast(table_id, {
         "type": "player_joined",
         "seat": seat_number,
+        "user_id": user_id,
         "username": user.username,
         "display_name": display,
         "stack": buyin,
@@ -918,9 +1048,16 @@ async def _handle_leave_seat(
     if not game_manager.is_seated(table_id, user_id):
         await ws.send_json({"type": "error", "message": "Non sei seduto a questo tavolo"})
         return
+    tournament = None
     if db_table.table_type == "sitgo":
-        await ws.send_json({"type": "error", "message": "Nel Sit&Go non puoi lasciare il posto durante il torneo"})
-        return
+        async with AsyncSessionLocal() as db:
+            t_result = await db.execute(
+                select(SitGoTournament).where(SitGoTournament.table_id == db_table.id)
+            )
+            tournament = t_result.scalar_one_or_none()
+        if tournament and tournament.status != "finished":
+            await ws.send_json({"type": "error", "message": "Nel Sit&Go puoi lasciare il tavolo solo a torneo concluso"})
+            return
 
     seat_number = game_manager.seat_for_user(table_id, user_id)
 
@@ -936,6 +1073,8 @@ async def _handle_leave_seat(
     # Recupera lo stack rimanente dall'engine
     engine_seat = game.seats.get(user_id)
     remaining_stack = engine_seat.stack if engine_seat else 0
+    if db_table.table_type == "sitgo":
+        remaining_stack = 0
 
     # Rimuovi dall'engine
     game.rimuovi_giocatore(user_id)
@@ -964,8 +1103,21 @@ async def _handle_leave_seat(
                 reason="table_cashout",
                 description=f"Uscita dal tavolo '{db_table.name}' posto {seat_number}",
             ))
+        final_position = None
+        payout_awarded = 0
+        if db_table.table_type == "sitgo" and tournament:
+            reg_result = await db.execute(
+                select(SitGoRegistration).where(
+                    SitGoRegistration.tournament_id == tournament.id,
+                    SitGoRegistration.user_id == user.id,
+                )
+            )
+            reg = reg_result.scalar_one_or_none()
+            if reg:
+                final_position = reg.final_position
+                payout_awarded = reg.payout_awarded
         open_session = await _get_open_session(db, db_table.id, user.id)
-        if open_session:
+        if open_session and db_table.table_type != "sitgo":
             open_session.current_stack = remaining_stack
             open_session.cashout = remaining_stack
             open_session.result_chips = remaining_stack - open_session.total_buyin
@@ -982,6 +1134,8 @@ async def _handle_leave_seat(
         "username": user.username,
         "display_name": display,
         "stack_returned": remaining_stack,
+        "final_position": final_position,
+        "payout_awarded": payout_awarded,
     })
     await game_manager.broadcast_state(table_id)
 

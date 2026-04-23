@@ -16,7 +16,7 @@ import { useAuth } from '../context/AuthContext';
 // Overlay conferma abbandono + riepilogo sessione
 // ─────────────────────────────────────────────────────────────────────────────
 
-function LeaveOverlay({ step, pnl, onConfirm, onCancel, onGoLobby }) {
+function LeaveOverlay({ step, pnl, isTournament, tournamentResult, onConfirm, onCancel, onGoLobby }) {
   const isPositive = pnl > 0;
   const isNeutral  = pnl === 0;
 
@@ -48,6 +48,25 @@ function LeaveOverlay({ step, pnl, onConfirm, onCancel, onGoLobby }) {
               <GoldButton onClick={onCancel} variant="ghost" size="md">Annulla</GoldButton>
               <GoldButton onClick={onConfirm} size="md">Abbandona</GoldButton>
             </div>
+          </>
+        ) : isTournament ? (
+          <>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#F5F1E8', fontStyle: 'italic', marginBottom: 24 }}>
+              Torneo terminato
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.45)', letterSpacing: '0.12em', marginBottom: 10 }}>
+              POSIZIONE FINALE
+            </div>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 34, fontWeight: 700, color: '#D4AF37', marginBottom: 18 }}>
+              {tournamentResult?.position ? `${tournamentResult.position}°` : '—'}
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.45)', letterSpacing: '0.12em', marginBottom: 8 }}>
+              PREMIO
+            </div>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 28, fontWeight: 700, color: (tournamentResult?.payout ?? 0) > 0 ? '#4caf50' : 'rgba(245,241,232,0.5)', marginBottom: 34 }}>
+              {(tournamentResult?.payout ?? 0).toLocaleString('it-IT')}
+            </div>
+            <GoldButton onClick={onGoLobby} size="md">Torna alla Lobby</GoldButton>
           </>
         ) : (
           <>
@@ -122,6 +141,7 @@ export default function TablePage() {
     eliminatedPlayers,
     tournamentEnded,
     latestEliminated,
+    tournamentResult,
   } = usePokerTable(tableId, { onChatMessage });
 
   const { messages, sendMessage } = useTableChat(sendChat, chatCallbackRef);
@@ -133,13 +153,20 @@ export default function TablePage() {
 
   // Utente conferma abbandono
   const handleLeaveConfirm = useCallback(() => {
+    if (isTournament) {
+      if (tournamentEnded && mySeat !== null) {
+        leaveSeat();
+      }
+      setLeaveStep('summary');
+      return;
+    }
     const seats = tableState?.seats ?? [];
     const myStack = mySeat !== null ? (seats[mySeat]?.stack ?? 0) : 0;
     const pnl = myStack - sessionBuyin;
     setSessionPnl(pnl);
     leaveSeat();
     setLeaveStep('summary');
-  }, [tableState, mySeat, sessionBuyin, leaveSeat]);
+  }, [isTournament, tournamentEnded, mySeat, leaveSeat, tableState, sessionBuyin]);
 
   const handleGoLobby = useCallback(() => {
     navigate('/lobby');
@@ -200,6 +227,8 @@ export default function TablePage() {
         <LeaveOverlay
           step={leaveStep}
           pnl={sessionPnl}
+          isTournament={isTournament}
+          tournamentResult={tournamentResult}
           onConfirm={handleLeaveConfirm}
           onCancel={() => setLeaveStep(null)}
           onGoLobby={handleGoLobby}

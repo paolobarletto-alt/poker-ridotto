@@ -104,28 +104,11 @@ async def _register_player(
     if n_registered >= tournament.max_seats:
         raise HTTPException(status_code=400, detail="Torneo pieno")
 
-    user_db = await db.get(User, user.id)
-    if user_db is None:
-        raise HTTPException(status_code=404, detail="Utente non trovato")
-    if user_db.chips_balance < tournament.buy_in:
-        raise HTTPException(status_code=400, detail="Saldo insufficiente per il buy-in del torneo")
-
-    user_db.chips_balance -= tournament.buy_in
-    db.add(
-        ChipsLedger(
-            user_id=user_db.id,
-            amount=-tournament.buy_in,
-            balance_after=user_db.chips_balance,
-            reason="sitgo_buyin",
-            game_id=tournament.id,
-            description=f"Iscrizione Sit&Go '{tournament.name}'",
-        )
-    )
     db.add(
         SitGoRegistration(
             tournament_id=tournament.id,
-            user_id=user_db.id,
-            buy_in_amount=tournament.buy_in,
+            user_id=user.id,
+            buy_in_amount=0,
         )
     )
     await db.flush()
@@ -258,23 +241,23 @@ async def unregister_sitgo(
     if reg is None:
         raise HTTPException(status_code=404, detail="Non sei iscritto a questo torneo")
 
-    user_db = await db.get(User, current_user.id)
-    if user_db is None:
-        raise HTTPException(status_code=404, detail="Utente non trovato")
-
-    refund = reg.buy_in_amount or tournament.buy_in
-    user_db.chips_balance += refund
-    reg.refunded_at = _now()
-    db.add(
-        ChipsLedger(
-            user_id=user_db.id,
-            amount=refund,
-            balance_after=user_db.chips_balance,
-            reason="sitgo_refund",
-            game_id=tournament.id,
-            description=f"Rimborso disiscrizione Sit&Go '{tournament.name}'",
+    if reg.buy_in_amount > 0:
+        user_db = await db.get(User, current_user.id)
+        if user_db is None:
+            raise HTTPException(status_code=404, detail="Utente non trovato")
+        refund = reg.buy_in_amount
+        user_db.chips_balance += refund
+        reg.refunded_at = _now()
+        db.add(
+            ChipsLedger(
+                user_id=user_db.id,
+                amount=refund,
+                balance_after=user_db.chips_balance,
+                reason="sitgo_refund",
+                game_id=tournament.id,
+                description=f"Rimborso disiscrizione Sit&Go '{tournament.name}'",
+            )
         )
-    )
     await db.delete(reg)
     await db.flush()
 
@@ -322,60 +305,26 @@ async def _start_tournament(tournament_id: uuid.UUID):
             poker_table = PokerTable(
                 name=tournament.name,
                 table_type="sitgo",
-                min_players=tournament.min_players,
+                min_players=2,
                 max_seats=tournament.max_seats,
                 speed=tournament.speed,
                 small_blind=first_sb,
                 big_blind=first_bb,
                 min_buyin=tournament.starting_chips,
                 max_buyin=tournament.starting_chips,
-                status="running",
+                status="waiting",
                 created_by=tournament.created_by,
             )
             db.add(poker_table)
             await db.flush()
             table_id = str(poker_table.id)
 
-            for seat_number, reg in enumerate(registrations):
-                db.add(
-                    TableSeat(
-                        table_id=poker_table.id,
-                        user_id=reg.user_id,
-                        seat_number=seat_number,
-                        stack=tournament.starting_chips,
-                        status="active",
-                    )
-                )
-                db.add(
-                    PlayerGameSession(
-                        user_id=reg.user_id,
-                        table_id=poker_table.id,
-                        table_name=tournament.name,
-                        table_type="sitgo",
-                        seat_number=seat_number,
-                        total_buyin=tournament.buy_in,
-                        current_stack=tournament.starting_chips,
-                        result_chips=0,
-                        hands_played=0,
-                        status="open",
-                        started_at=_now(),
-                        last_activity_at=_now(),
-                    )
-                )
-                game_manager.register_seat(table_id, str(reg.user_id), seat_number)
-
-            game = game_manager.get_or_create_table(
+            game_manager.get_or_create_table(
                 table_id=table_id,
                 small_blind=first_sb,
                 big_blind=first_bb,
                 speed=tournament.speed,
             )
-            for reg in registrations:
-                game.aggiungi_giocatore(
-                    player_id=str(reg.user_id),
-                    nome=str(reg.user_id),
-                    stack=tournament.starting_chips,
-                )
 
             tournament.status = "running"
             tournament.table_id = poker_table.id
@@ -387,10 +336,13 @@ async def _start_tournament(tournament_id: uuid.UUID):
             timer_task = asyncio.create_task(_blind_level_timer(str(tournament_id), table_id))
             _blind_timer_tasks[str(tournament_id)] = timer_task
 
-            game.inizia_mano()
-            await game_manager.broadcast_state(table_id)
-            if game.turno_attivo:
-                await game_manager.start_action_timer(table_id, game.turno_attivo)
+            await game_manager.broadcast(
+                table_id,
+                {
+                    "type": "waiting_players",
+                    "needed": tournament.max_seats,
+                },
+            )
 
             logger.info(
                 "Sit&Go %s avviato su tavolo %s (%d giocatori)",
@@ -667,6 +619,7 @@ async def _finish_tournament(
     payload_results = [
         {
             "position": row.SitGoRegistration.final_position,
+            "user_id": str(row.SitGoRegistration.user_id),
             "username": row.User.username,
             "chips_at_end": row.SitGoRegistration.chips_at_end,
             "payout": row.SitGoRegistration.payout_awarded,
