@@ -61,6 +61,7 @@ const TABLE_ANIMATION_TOKENS = Object.freeze({
     modals: 40,
   }),
 });
+const ENABLE_CARD_DEAL_ANIMATION = false;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1450,6 +1451,7 @@ export default function PokerTable({
   }, [seats, hardResetVisualState]);
 
   useEffect(() => {
+    if (!ENABLE_CARD_DEAL_ANIMATION) return;
     if (!connected || handNumber <= 0 || phase !== 'preflop') return;
     const dealCycleKey = `${handNumber}-${preflopCycleRef.current}`;
     if (dealtHandRef.current === dealCycleKey) return;
@@ -1528,6 +1530,17 @@ export default function PokerTable({
       if (currentCommunity.length === 0) setCommunityRevealTokens({});
       return;
     }
+
+    if (!ENABLE_CARD_DEAL_ANIMATION) {
+      const now = Date.now();
+      const tokenUpdates = {};
+      newIndexes.forEach((index) => {
+        tokenUpdates[index] = `community-${now}-${index}-${currentCommunity[index]}`;
+      });
+      setCommunityRevealTokens((prev) => ({ ...prev, ...tokenUpdates }));
+      return;
+    }
+
     const generation = animationGenerationRef.current;
 
     const timeoutId = scheduleAnimationTimeout(() => {
