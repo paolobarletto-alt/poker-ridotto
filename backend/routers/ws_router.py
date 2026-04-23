@@ -18,7 +18,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from jose import JWTError, jwt
@@ -38,6 +38,8 @@ from routers.sitgo_router import _finish_tournament, ensure_sitgo_blinds_started
 logger = logging.getLogger("ridotto.ws_router")
 
 router = APIRouter()
+SITGO_DISCONNECT_TIMEOUT_SECONDS = 120
+_sitgo_disconnect_tasks: Dict[str, asyncio.Task] = {}
 
 
 def _enrich_state(public: dict, seat_map: dict) -> dict:
@@ -50,6 +52,17 @@ def _enrich_state(public: dict, seat_map: dict) -> dict:
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _disconnect_task_key(table_id: str, user_id: str) -> str:
+    return f"{table_id}:{user_id}"
+
+
+def _cancel_disconnect_task(table_id: str, user_id: str) -> None:
+    key = _disconnect_task_key(table_id, user_id)
+    task = _sitgo_disconnect_tasks.pop(key, None)
+    if task and not task.done():
+        task.cancel()
 
 
 async def _get_open_session(
@@ -68,6 +81,45 @@ async def _get_open_session(
         .limit(1)
     )
     return result.scalar_one_or_none()
+
+
+async def _enforce_sitgo_disconnect_timeout(table_id: str, user_id: str) -> None:
+    key = _disconnect_task_key(table_id, user_id)
+    try:
+        await asyncio.sleep(SITGO_DISCONNECT_TIMEOUT_SECONDS)
+
+        game = game_manager.get_table(table_id)
+        if game is None or not game_manager.is_seated(table_id, user_id):
+            return
+
+        async with AsyncSessionLocal() as db:
+            table = await db.get(PokerTable, uuid.UUID(table_id))
+            if table is None or table.table_type != "sitgo":
+                return
+            user = await db.get(User, uuid.UUID(user_id))
+            if user is None:
+                return
+            t_result = await db.execute(
+                select(SitGoTournament).where(SitGoTournament.table_id == table.id)
+            )
+            tournament = t_result.scalar_one_or_none()
+            if tournament is None or tournament.status != "running":
+                return
+
+        await _handle_leave_seat(
+            ws=None,
+            db_table=table,
+            game=game,
+            user=user,
+            table_id=table_id,
+            leave_reason="disconnect_timeout",
+        )
+    except asyncio.CancelledError:
+        return
+    except Exception:
+        logger.exception("Errore timeout disconnessione Sit&Go user=%s tavolo=%s", user_id, table_id)
+    finally:
+        _sitgo_disconnect_tasks.pop(key, None)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SCHEMI PYDANTIC
@@ -587,6 +639,7 @@ async def websocket_table(
         return
 
     user_id = str(current_user.id)
+    _cancel_disconnect_task(table_id, user_id)
 
     # ── 2. Carica il tavolo dal DB ─────────────────────────────────────────
     async with AsyncSessionLocal() as db:
@@ -632,9 +685,22 @@ async def websocket_table(
             logger.info("Stato tavolo %s ricostruito dal DB (%d giocatori)", table_id, len(db_seats))
 
     game_manager.add_connection(table_id, user_id, websocket)
+    if game_manager.is_seated(table_id, user_id):
+        async with AsyncSessionLocal() as db:
+            seat_result = await db.execute(
+                select(TableSeat).where(
+                    TableSeat.table_id == uuid.UUID(table_id),
+                    TableSeat.user_id == current_user.id,
+                )
+            )
+            db_seat = seat_result.scalar_one_or_none()
+            if db_seat and db_seat.status != "active":
+                db_seat.status = "active"
+                await db.commit()
 
     tournament_payload = None
     if db_table.table_type == "sitgo":
+        _cancel_disconnect_task(table_id, user_id)
         async with AsyncSessionLocal() as db:
             t_result = await db.execute(
                 select(SitGoTournament).where(SitGoTournament.table_id == db_table.id)
@@ -652,6 +718,7 @@ async def websocket_table(
             tournament_payload = {
                 "id": str(tournament.id),
                 "name": tournament.name,
+                "buy_in": tournament.buy_in,
                 "speed": tournament.speed,
                 "current_blind_level": tournament.current_blind_level,
                 "blind_schedule": schedule,
@@ -762,6 +829,7 @@ async def websocket_table(
         if game_manager.is_seated(table_id, user_id):
             # Aggiorna solo lo stato DB a "away" senza toccare l'engine
             async with AsyncSessionLocal() as db:
+                table = await db.get(PokerTable, uuid.UUID(table_id))
                 seat_res = await db.execute(
                     select(TableSeat).where(
                         TableSeat.table_id == uuid.UUID(table_id),
@@ -772,6 +840,14 @@ async def websocket_table(
                 if db_seat:
                     db_seat.status = "away"
                     await db.commit()
+
+                if table and table.table_type == "sitgo":
+                    key = _disconnect_task_key(table_id, user_id)
+                    task = _sitgo_disconnect_tasks.get(key)
+                    if task is None or task.done():
+                        _sitgo_disconnect_tasks[key] = asyncio.create_task(
+                            _enforce_sitgo_disconnect_timeout(table_id, user_id)
+                        )
 
             await game_manager.broadcast_state(table_id)
 
@@ -823,7 +899,7 @@ async def _handle_join_seat(
             if registration is None:
                 await ws.send_json({"type": "error", "message": "Non sei registrato a questo Sit&Go"})
                 return
-            if registration.final_position is not None:
+            if registration.final_position is not None or registration.player_status in ("eliminated", "left"):
                 await ws.send_json({"type": "error", "message": "Sei già eliminato da questo torneo"})
                 return
 
@@ -863,6 +939,9 @@ async def _handle_join_seat(
                     return
                 user_db.chips_balance -= tournament.buy_in
                 registration.buy_in_amount = tournament.buy_in
+                registration.player_status = "active"
+                registration.eliminated_at = None
+                registration.elimination_reason = None
                 tournament.prize_pool += tournament.buy_in
                 db.add(ChipsLedger(
                     user_id=user.id,
@@ -1044,16 +1123,19 @@ async def _handle_join_seat(
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def _handle_leave_seat(
-    ws: WebSocket,
+    ws: Optional[WebSocket],
     db_table: PokerTable,
     game: Any,
     user: User,
     table_id: str,
+    leave_reason: str = "left",
 ):
     user_id = str(user.id)
+    _cancel_disconnect_task(table_id, user_id)
 
     if not game_manager.is_seated(table_id, user_id):
-        await ws.send_json({"type": "error", "message": "Non sei seduto a questo tavolo"})
+        if ws is not None:
+            await ws.send_json({"type": "error", "message": "Non sei seduto a questo tavolo"})
         return
     tournament = None
     tournament_running = False
@@ -1134,6 +1216,9 @@ async def _handle_leave_seat(
                     if active_regs > 0:
                         reg.final_position = active_regs
                         reg.chips_at_end = 0
+                        reg.player_status = "left" if leave_reason in ("left", "disconnect_timeout") else "eliminated"
+                        reg.elimination_reason = leave_reason
+                        reg.eliminated_at = _now_utc()
                         eliminated_now = True
 
                     remaining_regs_result = await db.execute(
@@ -1157,6 +1242,14 @@ async def _handle_leave_seat(
             open_session.last_activity_at = _now_utc()
             open_session.status = "closed"
             open_session.close_reason = "left_table"
+        elif open_session and db_table.table_type == "sitgo" and tournament_running:
+            open_session.current_stack = 0
+            open_session.cashout = 0
+            open_session.result_chips = -open_session.total_buyin
+            open_session.ended_at = _now_utc()
+            open_session.last_activity_at = _now_utc()
+            open_session.status = "closed"
+            open_session.close_reason = leave_reason
         if db_table.table_type == "sitgo" and tournament_running and winner_user_id:
             await db.flush()
             await _finish_tournament(
@@ -1198,6 +1291,7 @@ async def _handle_leave_seat(
         "stack_returned": remaining_stack,
         "final_position": final_position,
         "payout_awarded": payout_awarded,
+        "buy_in": tournament.buy_in if tournament else 0,
     })
     await game_manager.broadcast_state(table_id)
 

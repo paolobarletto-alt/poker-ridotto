@@ -192,6 +192,9 @@ class SitGoRegistrationInfo(BaseModel):
     avatar_initials: Optional[str]
     registered_at: datetime
     final_position: Optional[int] = None
+    player_status: str = "active"
+    elimination_reason: Optional[str] = None
+    eliminated_at: Optional[datetime] = None
     payout_awarded: int = 0
 
     model_config = {"from_attributes": True}

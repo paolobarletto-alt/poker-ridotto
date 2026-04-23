@@ -438,9 +438,12 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
         if (msg.username === user?.username) {
           setMySeat(null); setMyCards([]); setSessionBuyin(0);
           if (msg.final_position != null) {
+            const buyIn = Number(msg.buy_in ?? tournament?.buy_in ?? 0);
             setTournamentResult({
               position: msg.final_position,
               payout: msg.payout_awarded ?? 0,
+              buy_in: buyIn,
+              result: Number(msg.payout_awarded ?? 0) - buyIn,
             });
           }
           // Aggiorna saldo nel contesto auth dopo il cashout
@@ -496,6 +499,7 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           setTournament({
             id:                   tr.id,
             name:                 tr.name,
+            buy_in:               tr.buy_in ?? 0,
             current_blind_level:  tr.current_blind_level ?? 1,
             blind_schedule:       tr.blind_schedule ?? [],
             speed:                tr.speed ?? 'normal',
@@ -543,9 +547,12 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
         if (user?.id && Array.isArray(msg.position_results)) {
           const mine = msg.position_results.find((r) => r.user_id === user.id);
           if (mine) {
+            const buyIn = Number(msg.buy_in ?? 0);
             setTournamentResult({
               position: mine.position ?? null,
               payout: mine.payout ?? 0,
+              buy_in: buyIn,
+              result: Number(mine.payout ?? 0) - buyIn,
             });
           }
         }

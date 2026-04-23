@@ -361,6 +361,11 @@ class SitGoRegistration(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     # 1 = vincitore, null = ancora in gioco / torneo non finito
     final_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # active | eliminated | left
+    player_status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    # busted | left | disconnect_timeout
+    elimination_reason: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    eliminated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     chips_at_end: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     buy_in_amount: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     payout_awarded: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)

@@ -109,6 +109,7 @@ async def _register_player(
             tournament_id=tournament.id,
             user_id=user.id,
             buy_in_amount=0,
+            player_status="active",
         )
     )
     await db.flush()
@@ -187,6 +188,9 @@ async def get_sitgo(
             avatar_initials=row.avatar_initials,
             registered_at=row.SitGoRegistration.registered_at,
             final_position=row.SitGoRegistration.final_position,
+            player_status=row.SitGoRegistration.player_status,
+            elimination_reason=row.SitGoRegistration.elimination_reason,
+            eliminated_at=row.SitGoRegistration.eliminated_at,
             payout_awarded=row.SitGoRegistration.payout_awarded,
         )
         for row in regs_result
@@ -480,6 +484,9 @@ async def handle_sitgo_hand_end(table_id: str, db: AsyncSession):
         seat = game_manager.seat_for_user(table_id, uid)
 
         reg.final_position = next_position
+        reg.player_status = "eliminated"
+        reg.elimination_reason = "busted"
+        reg.eliminated_at = _now()
         reg.chips_at_end = 0
         next_position -= 1
 
@@ -565,6 +572,9 @@ async def _finish_tournament(
     winner_reg = winner_reg_result.scalar_one_or_none()
     if winner_reg:
         winner_reg.final_position = 1
+        winner_reg.player_status = "active"
+        winner_reg.elimination_reason = None
+        winner_reg.eliminated_at = None
         winner_reg.chips_at_end = winner_stack
 
     tournament.status = "finished"
@@ -595,6 +605,10 @@ async def _finish_tournament(
         payout = payouts.get(position, 0)
         reg.payout_awarded = payout
         reg.payout_awarded_at = now if payout > 0 else None
+        if position > 1 and reg.player_status == "active":
+            reg.player_status = "eliminated"
+            reg.elimination_reason = reg.elimination_reason or "busted"
+            reg.eliminated_at = reg.eliminated_at or now
         if payout > 0:
             user.chips_balance += payout
             db.add(

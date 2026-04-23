@@ -38,11 +38,11 @@ function LeaveOverlay({ step, pnl, isTournament, tournamentResult, onConfirm, on
         {step === 'confirm' ? (
           <>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#F5F1E8', fontStyle: 'italic', marginBottom: 10 }}>
-              {isTournament ? 'Sicuro di abbandonare torneo?' : 'Abbandonare il tavolo?'}
+              {isTournament ? 'Sei sicuro di voler abbandonare?' : 'Abbandonare il tavolo?'}
             </div>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.5)', letterSpacing: '0.06em', marginBottom: 32, lineHeight: 1.6 }}>
               {isTournament ? (
-                <>Verrai eliminato immediatamente!</>
+                <>Verrai eliminato dal torneo.</>
               ) : (
                 <>
                   Se hai chips in gioco in una mano in corso,<br />
@@ -66,11 +66,15 @@ function LeaveOverlay({ step, pnl, isTournament, tournamentResult, onConfirm, on
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 34, fontWeight: 700, color: '#D4AF37', marginBottom: 18 }}>
               {tournamentResult?.position ? `${tournamentResult.position}°` : '—'}
             </div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.45)', letterSpacing: '0.12em', marginBottom: 8 }}>
-              PREMIO
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.6)', letterSpacing: '0.06em', marginBottom: 12 }}>
+              Sei eliminato. Posizione: {tournamentResult?.position ?? '—'}.
+              {' '}Risultato: {(tournamentResult?.result ?? 0) > 0 ? '+' : ''}{(tournamentResult?.result ?? 0).toLocaleString('it-IT')}
             </div>
-            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 28, fontWeight: 700, color: (tournamentResult?.payout ?? 0) > 0 ? '#4caf50' : 'rgba(245,241,232,0.5)', marginBottom: 34 }}>
-              {(tournamentResult?.payout ?? 0).toLocaleString('it-IT')}
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.45)', letterSpacing: '0.12em', marginBottom: 8 }}>
+              {((tournamentResult?.payout ?? 0) > 0) ? 'PREMIO' : 'PERDITA'}
+            </div>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 28, fontWeight: 700, color: (tournamentResult?.result ?? 0) > 0 ? '#4caf50' : '#e57373', marginBottom: 34 }}>
+              {(tournamentResult?.result ?? 0) > 0 ? '+' : ''}{(tournamentResult?.result ?? 0).toLocaleString('it-IT')}
             </div>
             <GoldButton onClick={onGoLobby} size="md">Torna alla Lobby</GoldButton>
           </>
