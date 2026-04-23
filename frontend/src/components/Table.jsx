@@ -24,6 +24,44 @@ if (typeof document !== 'undefined' && !document.getElementById('ridotto-table-s
   document.head.appendChild(tag);
 }
 
+// ── Animation foundation tokens (Dramatic-inspired) ──────────────────────────
+const DRAMATIC_SPEED_MUL = 1.35;
+
+const ANIM_EASINGS = Object.freeze({
+  standard: 'cubic-bezier(.4,0,.2,1)',
+  cardTravel: 'cubic-bezier(.4,1.3,.5,1)',
+  cardFlipBounce: 'cubic-bezier(.34,1.56,.64,1)',
+  chipFlightArc: 'cubic-bezier(.4,0,.3,1)',
+  linear: 'linear',
+  ease: 'ease',
+});
+
+const ANIM_TIMINGS = Object.freeze({
+  baseMs: Math.round(500 * DRAMATIC_SPEED_MUL),
+  quickMs: Math.round(300 * DRAMATIC_SPEED_MUL),
+  settleMs: Math.round(200 * DRAMATIC_SPEED_MUL),
+  seatSlideMs: 600,
+  chipFadeMs: 250,
+  timerTickMs: 120,
+  revealMinMs: 420,
+  chipStaggerMinMs: 25,
+  chipStaggerMaxMs: 40,
+});
+
+const TABLE_ANIMATION_TOKENS = Object.freeze({
+  variant: 'dramatic',
+  speedMultiplier: DRAMATIC_SPEED_MUL,
+  easings: ANIM_EASINGS,
+  timings: ANIM_TIMINGS,
+  zLayers: Object.freeze({
+    felt: 1,
+    seats: 2,
+    overlays: 18,
+    hud: 20,
+    modals: 40,
+  }),
+});
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtCountdown(ms) {
@@ -32,6 +70,96 @@ function fmtCountdown(ms) {
   const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
   const s = (totalSec % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
+}
+
+function getElementCenterInContainer(element, container) {
+  if (!element || !container) return null;
+  const targetRect = element.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  return {
+    x: targetRect.left - containerRect.left + (targetRect.width / 2),
+    y: targetRect.top - containerRect.top + (targetRect.height / 2),
+  };
+}
+
+function createAnimationQueue() {
+  const queue = [];
+  return {
+    enqueue(task) {
+      const item = {
+        id: task?.id ?? `anim-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        createdAt: Date.now(),
+        ...task,
+      };
+      queue.push(item);
+      return item;
+    },
+    dequeue() {
+      return queue.shift() ?? null;
+    },
+    peek() {
+      return queue[0] ?? null;
+    },
+    clear() {
+      queue.length = 0;
+    },
+    size() {
+      return queue.length;
+    },
+    snapshot() {
+      return [...queue];
+    },
+  };
+}
+
+function createFlightScaffold({ kind, from, to, payload = null, delayMs = 0, durationMs = ANIM_TIMINGS.baseMs }) {
+  return {
+    id: `flight-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    kind,
+    from,
+    to,
+    payload,
+    delayMs,
+    durationMs,
+    createdAt: Date.now(),
+  };
+}
+
+function FlightCard({ flight, cardBack = 'ridotto' }) {
+  const [started, setStarted] = useState(false);
+
+  useEffect(() => {
+    let raf = null;
+    const timeoutId = setTimeout(() => {
+      raf = requestAnimationFrame(() => setStarted(true));
+    }, Math.max(0, flight.delayMs ?? 0));
+    return () => {
+      clearTimeout(timeoutId);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [flight.delayMs, flight.id]);
+
+  const from = flight.from ?? { x: 0, y: 0 };
+  const to = flight.to ?? from;
+  const dx = (to.x ?? 0) - (from.x ?? 0);
+  const dy = (to.y ?? 0) - (from.y ?? 0);
+  const durationMs = Math.max(160, flight.durationMs ?? ANIM_TIMINGS.baseMs);
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: from.x ?? 0,
+        top: from.y ?? 0,
+        transform: `translate(-50%,-50%) translate(${started ? dx : 0}px,${started ? dy : 0}px) scale(${started ? 1 : 0.84}) rotate(${started ? (flight.rotateTo ?? 0) : (flight.rotateFrom ?? -8)}deg)`,
+        transition: `transform ${durationMs}ms ${flight.easing ?? ANIM_EASINGS.cardTravel}, opacity ${Math.min(240, durationMs)}ms ${ANIM_EASINGS.ease}`,
+        opacity: started ? 1 : 0,
+        willChange: 'transform,opacity',
+      }}
+    >
+      <Card card="back" size={flight.size ?? 'sm'} cardBack={cardBack} />
+    </div>
+  );
 }
 
 // ── Tournament Panel ─────────────────────────────────────────────────────────
@@ -388,6 +516,56 @@ export function Card({ card, size = 'md', cardBack = 'ridotto' }) {
   );
 }
 
+function FlipRevealCard({
+  card,
+  size = 'md',
+  cardBack = 'ridotto',
+  triggerKey,
+  delayMs = 0,
+  durationMs = Math.max(ANIM_TIMINGS.revealMinMs, 560),
+}) {
+  const [started, setStarted] = useState(false);
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    setStarted(false);
+    setSettled(false);
+    let raf = null;
+    const startTimeout = setTimeout(() => {
+      raf = requestAnimationFrame(() => setStarted(true));
+    }, Math.max(0, delayMs));
+    const settleTimeout = setTimeout(() => setSettled(true), Math.max(0, delayMs) + durationMs + 40);
+    return () => {
+      clearTimeout(startTimeout);
+      clearTimeout(settleTimeout);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [delayMs, durationMs, triggerKey]);
+
+  if (settled) return <Card card={card} size={size} cardBack={cardBack} />;
+
+  return (
+    <div style={{ position: 'relative', width: 'fit-content', height: 'fit-content', perspective: 900 }}>
+      <div
+        style={{
+          position: 'relative',
+          transformStyle: 'preserve-3d',
+          transition: `transform ${durationMs}ms ${ANIM_EASINGS.cardFlipBounce}`,
+          transform: `rotateY(${started ? 180 : 0}deg)`,
+          willChange: 'transform',
+        }}
+      >
+        <div style={{ backfaceVisibility: 'hidden' }}>
+          <Card card="back" size={size} cardBack={cardBack} />
+        </div>
+        <div style={{ position: 'absolute', inset: 0, transform: 'rotateY(180deg)', backfaceVisibility: 'hidden' }}>
+          <Card card={card} size={size} cardBack={cardBack} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ChipStack
 // ─────────────────────────────────────────────────────────────────────────────
@@ -460,7 +638,12 @@ function Seat({
   isActing, timerSeconds, timerTrigger,
   phase, cardBack,
   showdownResult,
+  showdownReveal,
   seatDelta,
+  anchorRef,
+  cardAnchorRef,
+  stackAnchorRef,
+  betAnchorRef,
   onEmptyClick,
 }) {
   const isWinner  = showdownResult?.won === true;
@@ -468,11 +651,17 @@ function Seat({
   const isSitOut  = seat?.status === 'sit_out' || seat?.status === 'seduto_out';
   const hasCards  = !isFolded && !isSitOut && phase !== 'waiting' && phase !== 'in_attesa';
   const revealCards = showdownResult?.cards;
+  const seatVisualFilter = isFolded
+    ? 'grayscale(0.82) saturate(0.55) brightness(0.78)'
+    : isSitOut
+      ? 'grayscale(0.35) saturate(0.82)'
+      : 'none';
 
   // ── Posto vuoto ──────────────────────────────────────────────────────────
   if (!seat) {
     return (
       <div
+        ref={anchorRef}
         role="button" tabIndex={0}
         onClick={onEmptyClick}
         onKeyDown={(e) => e.key === 'Enter' && onEmptyClick()}
@@ -499,18 +688,46 @@ function Seat({
   })();
 
   return (
-    <div style={{
+    <div
+      ref={anchorRef}
+      style={{
       position: 'absolute', ...pos, width: 150, transform: 'translate(-50%,-50%)',
-      textAlign: 'center', opacity: isFolded ? 0.38 : isSitOut ? 0.55 : 1, transition: 'opacity 0.3s',
+      textAlign: 'center', opacity: isFolded ? 0.34 : isSitOut ? 0.55 : 1,
+      filter: seatVisualFilter,
+      transition: 'opacity 240ms ease, filter 240ms ease, transform 240ms ease',
       zIndex: isActing ? 2 : 1,
-    }}>
+      }}
+    >
 
       {/* ── Carte ──────────────────────────────────────────────────────── */}
       {displayCards.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 2, marginBottom: 6, transform: isHero ? 'scale(1.1)' : 'none', transformOrigin: 'bottom center' }}>
+        <div
+          ref={cardAnchorRef}
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 2,
+            marginBottom: 6,
+            transform: isHero ? 'scale(1.1)' : 'none',
+            transformOrigin: 'bottom center',
+            opacity: isFolded ? 0.3 : 1,
+            transition: 'opacity 240ms ease',
+          }}
+        >
           {displayCards.map((c, i) => (
             <div key={i} style={{ transform: `rotate(${i === 0 ? -4 : 4}deg)`, transformOrigin: 'bottom center' }}>
-              <Card card={c} size={isHero ? 'md' : 'sm'} cardBack={cardBack} />
+              {revealCards && showdownReveal?.token ? (
+                <FlipRevealCard
+                  card={c}
+                  size={isHero ? 'md' : 'sm'}
+                  cardBack={cardBack}
+                  triggerKey={`${showdownReveal.token}-${i}-${c}`}
+                  delayMs={(showdownReveal.delayMs ?? 0) + (i * 120)}
+                  durationMs={Math.max(ANIM_TIMINGS.revealMinMs, 600)}
+                />
+              ) : (
+                <Card card={c} size={isHero ? 'md' : 'sm'} cardBack={cardBack} />
+              )}
             </div>
           ))}
         </div>
@@ -553,7 +770,7 @@ function Seat({
           </div>
 
           {/* Stack */}
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: isHero ? 13 : 12, fontWeight: isHero ? 600 : 400, color: isHero ? '#D4AF37' : isActing ? '#D4AF37' : 'rgba(245,241,232,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+          <div ref={stackAnchorRef} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: isHero ? 13 : 12, fontWeight: isHero ? 600 : 400, color: isHero ? '#D4AF37' : isActing ? '#D4AF37' : 'rgba(245,241,232,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
             {seat.stack.toLocaleString('it-IT')}
             {seatDelta != null && seatDelta !== 0 && (
               <span style={{
@@ -593,11 +810,13 @@ function Seat({
         </div>
       )}
       {isFolded && (
-        <div style={{ marginTop: 3, fontSize: 9, letterSpacing: '0.18em', fontWeight: 600, color: 'rgba(245,241,232,0.4)', fontFamily: 'Inter, sans-serif' }}>FOLD</div>
+        <div style={{ marginTop: 3, fontSize: 9, letterSpacing: '0.18em', fontWeight: 600, color: 'rgba(245,241,232,0.45)', fontFamily: 'Inter, sans-serif' }}>FOLD</div>
       )}
       {isSitOut && (
         <div style={{ marginTop: 3, fontSize: 9, letterSpacing: '0.18em', fontWeight: 600, color: 'rgba(245,241,232,0.5)', fontFamily: 'Inter, sans-serif', background: 'rgba(0,0,0,0.5)', padding: '1px 5px' }}>SIT OUT</div>
       )}
+
+      <div ref={betAnchorRef} style={{ position: 'absolute', ...betOffset, width: 1, height: 1, opacity: 0, pointerEvents: 'none' }} />
 
       {/* ── Chips puntata ──────────────────────────────────────────────── */}
       {seat.bet_in_round > 0 && !isFolded && (
@@ -750,6 +969,41 @@ export default function PokerTable({
   const [selectedSeat, setSelectedSeat] = useState(null);
   const [raiseAmt,     setRaiseAmt]     = useState(20);
   const chatEndRef = useRef(null);
+  const tableStageRef = useRef(null);
+  const feltRef = useRef(null);
+  const potAnchorRef = useRef(null);
+  const deckAnchorRef = useRef(null);
+  const communityAnchorRef = useRef(null);
+  const communityCardRefs = useRef(Array.from({ length: 5 }, () => null));
+  const seatAnchorRefs = useRef(Array.from({ length: MAX_SEATS }, () => null));
+  const seatCardAnchorRefs = useRef(Array.from({ length: MAX_SEATS }, () => null));
+  const seatStackAnchorRefs = useRef(Array.from({ length: MAX_SEATS }, () => null));
+  const seatBetAnchorRefs = useRef(Array.from({ length: MAX_SEATS }, () => null));
+  const overlayLayerRefs = useRef({ cards: null, chips: null, pot: null });
+  const animationQueueRef = useRef(createAnimationQueue());
+  const chipFlightTimersRef = useRef(new Map());
+  const potPayoutTimersRef = useRef(new Map());
+  const previousTableSnapshotRef = useRef(null);
+  const animationFoundationRef = useRef({
+    tokens: TABLE_ANIMATION_TOKENS,
+    queue: animationQueueRef.current,
+  });
+  const dealtHandRef = useRef(null);
+  const previousCommunityRef = useRef([]);
+  const [chipFlights, setChipFlights] = useState([]);
+  const [potPayoutFlights, setPotPayoutFlights] = useState([]);
+  const [chipFlightNow, setChipFlightNow] = useState(Date.now());
+  const [cardFlights, setCardFlights] = useState([]);
+  const [communityRevealTokens, setCommunityRevealTokens] = useState({});
+  const [showdownRevealTokens, setShowdownRevealTokens] = useState({});
+  const animationGenerationRef = useRef(0);
+  const animationTimeoutsRef = useRef(new Set());
+  const previousHandNumberRef = useRef(null);
+  const previousTableIdRef = useRef(tableId ?? null);
+  const previousConnectedRef = useRef(connected);
+  const seatOccupancySignatureRef = useRef('');
+  const showdownSignatureRef = useRef('');
+  const lastWinnerAnimKeyRef = useRef('');
 
   // ── Derivazioni ───────────────────────────────────────────────────────────
   const seats      = tableState?.seats      ?? Array.from({ length: MAX_SEATS }, () => null);
@@ -781,6 +1035,21 @@ export default function PokerTable({
   }, [isMyTurn, actingSeat]);
 
   const clampedRaise = Math.max(minRaise, Math.min(raiseAmt, myStack));
+
+  const clearPendingAnimationTimeouts = useCallback(() => {
+    animationTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    animationTimeoutsRef.current.clear();
+  }, []);
+
+  const scheduleAnimationTimeout = useCallback((cb, delayMs = 0, generation = animationGenerationRef.current) => {
+    const timeoutId = window.setTimeout(() => {
+      animationTimeoutsRef.current.delete(timeoutId);
+      if (generation !== animationGenerationRef.current) return;
+      cb?.();
+    }, Math.max(0, delayMs));
+    animationTimeoutsRef.current.add(timeoutId);
+    return timeoutId;
+  }, []);
 
   // ── Auto-scroll chat ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -817,6 +1086,601 @@ export default function PokerTable({
     setSelectedSeat(idx);
     setShowBuyin(true);
   }, [isTournament, joinSeat, mySeat]);
+
+  const setSeatAnchorRef = useCallback((idx, node) => {
+    seatAnchorRefs.current[idx] = node;
+  }, []);
+
+  const setSeatCardAnchorRef = useCallback((idx, node) => {
+    seatCardAnchorRefs.current[idx] = node;
+  }, []);
+
+  const setSeatStackAnchorRef = useCallback((idx, node) => {
+    seatStackAnchorRefs.current[idx] = node;
+  }, []);
+
+  const setSeatBetAnchorRef = useCallback((idx, node) => {
+    seatBetAnchorRefs.current[idx] = node;
+  }, []);
+
+  const setOverlayLayerRef = useCallback((layerKey, node) => {
+    overlayLayerRefs.current[layerKey] = node;
+  }, []);
+
+  const setCommunityCardRef = useCallback((idx, node) => {
+    communityCardRefs.current[idx] = node;
+  }, []);
+
+  const getSeatAnchorPoint = useCallback((idx) => (
+    getElementCenterInContainer(seatAnchorRefs.current[idx], tableStageRef.current)
+  ), []);
+
+  const getSeatCardPoint = useCallback((idx) => (
+    getElementCenterInContainer(seatCardAnchorRefs.current[idx], tableStageRef.current)
+    ?? getSeatAnchorPoint(idx)
+  ), [getSeatAnchorPoint]);
+
+  const getSeatStackPoint = useCallback((idx) => (
+    getElementCenterInContainer(seatStackAnchorRefs.current[idx], tableStageRef.current)
+    ?? getSeatAnchorPoint(idx)
+  ), [getSeatAnchorPoint]);
+
+  const getSeatBetPoint = useCallback((idx) => {
+    const point = getElementCenterInContainer(seatBetAnchorRefs.current[idx], tableStageRef.current);
+    if (point) return point;
+    const fallback = getSeatAnchorPoint(idx);
+    if (!fallback) return null;
+    return { x: fallback.x, y: fallback.y - 34 };
+  }, [getSeatAnchorPoint]);
+
+  const getPotAnchorPoint = useCallback(() => (
+    getElementCenterInContainer(potAnchorRef.current, tableStageRef.current)
+  ), []);
+
+  const getDeckAnchorPoint = useCallback(() => (
+    getElementCenterInContainer(deckAnchorRef.current, tableStageRef.current)
+    ?? getElementCenterInContainer(communityAnchorRef.current, tableStageRef.current)
+  ), []);
+
+  const getCommunityCardPoint = useCallback((idx) => (
+    getElementCenterInContainer(communityCardRefs.current[idx], tableStageRef.current)
+  ), []);
+
+  const queueScaffoldFlight = useCallback((flight) => (
+    animationQueueRef.current.enqueue(createFlightScaffold(flight))
+  ), []);
+
+  const spawnCardFlights = useCallback((flights, generation = animationGenerationRef.current) => {
+    if (generation !== animationGenerationRef.current) return;
+    if (!Array.isArray(flights) || flights.length === 0) return;
+    const validFlights = flights
+      .filter((flight) => flight?.from && flight?.to)
+      .map((flight) => ({ ...flight, generation }));
+    if (validFlights.length === 0) return;
+    setCardFlights((prev) => {
+      const activePrev = prev.filter((flight) => flight.generation === animationGenerationRef.current);
+      const mergedByKey = new Map(activePrev.map((flight) => [flight.animKey ?? flight.id, flight]));
+      validFlights.forEach((flight) => {
+        mergedByKey.set(flight.animKey ?? flight.id, flight);
+      });
+      return [...mergedByKey.values()];
+    });
+    const maxFlightDuration = validFlights.reduce(
+      (max, flight) => Math.max(max, (flight.delayMs ?? 0) + (flight.durationMs ?? ANIM_TIMINGS.baseMs)),
+      0,
+    );
+    const idsToDrop = new Set(validFlights.map((flight) => flight.id));
+    const cleanupId = scheduleAnimationTimeout(() => {
+      setCardFlights((prev) => prev.filter((flight) => !idsToDrop.has(flight.id)));
+    }, maxFlightDuration + 280, generation);
+    return () => {
+      animationTimeoutsRef.current.delete(cleanupId);
+      window.clearTimeout(cleanupId);
+    };
+  }, [scheduleAnimationTimeout]);
+
+  useEffect(() => {
+    animationFoundationRef.current = {
+      tokens: TABLE_ANIMATION_TOKENS,
+      queue: animationQueueRef.current,
+      refs: {
+        stage: tableStageRef.current,
+        felt: feltRef.current,
+        overlays: overlayLayerRefs.current,
+        deck: deckAnchorRef.current,
+        community: communityAnchorRef.current,
+        pot: potAnchorRef.current,
+      },
+      helpers: {
+        getSeatAnchorPoint,
+        getSeatCardPoint,
+        getSeatStackPoint,
+        getSeatBetPoint,
+        getDeckAnchorPoint,
+        getCommunityCardPoint,
+        getPotAnchorPoint,
+        queueScaffoldFlight,
+      },
+    };
+  }, [getSeatAnchorPoint, getSeatCardPoint, getSeatStackPoint, getSeatBetPoint, getDeckAnchorPoint, getCommunityCardPoint, getPotAnchorPoint, queueScaffoldFlight]);
+
+  const removeChipFlight = useCallback((flightId) => {
+    const timerId = chipFlightTimersRef.current.get(flightId);
+    if (timerId) {
+      clearTimeout(timerId);
+      chipFlightTimersRef.current.delete(flightId);
+    }
+    setChipFlights((prev) => prev.filter((flight) => flight.id !== flightId));
+  }, []);
+
+  const clearChipFlights = useCallback(() => {
+    chipFlightTimersRef.current.forEach((timerId) => clearTimeout(timerId));
+    chipFlightTimersRef.current.clear();
+    setChipFlights([]);
+  }, []);
+
+  const removePotPayoutFlight = useCallback((flightId) => {
+    const timerId = potPayoutTimersRef.current.get(flightId);
+    if (timerId) {
+      clearTimeout(timerId);
+      potPayoutTimersRef.current.delete(flightId);
+    }
+    setPotPayoutFlights((prev) => prev.filter((flight) => flight.id !== flightId));
+  }, []);
+
+  const clearPotPayoutFlights = useCallback(() => {
+    potPayoutTimersRef.current.forEach((timerId) => clearTimeout(timerId));
+    potPayoutTimersRef.current.clear();
+    setPotPayoutFlights([]);
+  }, []);
+
+  const hardResetVisualState = useCallback(() => {
+    animationGenerationRef.current += 1;
+    clearPendingAnimationTimeouts();
+    clearChipFlights();
+    clearPotPayoutFlights();
+    setCardFlights([]);
+    setCommunityRevealTokens({});
+    setShowdownRevealTokens({});
+    setChipFlightNow(Date.now());
+    animationQueueRef.current.clear();
+    previousTableSnapshotRef.current = null;
+    dealtHandRef.current = null;
+    previousCommunityRef.current = [];
+    showdownSignatureRef.current = '';
+    lastWinnerAnimKeyRef.current = '';
+  }, [clearChipFlights, clearPendingAnimationTimeouts, clearPotPayoutFlights]);
+
+  const enqueueChipFlight = useCallback(({
+    kind,
+    from,
+    to,
+    amount,
+    delayMs = 0,
+    durationMs = ANIM_TIMINGS.baseMs,
+    arcHeight = 38,
+  }) => {
+    if (!from || !to) return null;
+    const now = Date.now();
+    const id = `chip-flight-${now}-${Math.random().toString(16).slice(2)}`;
+    const flight = {
+      id,
+      kind,
+      from,
+      to,
+      amount,
+      startAt: now + delayMs,
+      durationMs,
+      arcHeight,
+      createdAt: now,
+    };
+    queueScaffoldFlight({
+      kind: `chip:${kind}`,
+      from,
+      to,
+      payload: { amount },
+      delayMs,
+      durationMs,
+    });
+    setChipFlights((prev) => [...prev, flight]);
+    const ttlMs = Math.max(0, delayMs + durationMs + ANIM_TIMINGS.chipFadeMs + 120);
+    const timerId = scheduleAnimationTimeout(() => removeChipFlight(id), ttlMs);
+    chipFlightTimersRef.current.set(id, timerId);
+    return flight;
+  }, [queueScaffoldFlight, removeChipFlight, scheduleAnimationTimeout]);
+
+  const enqueuePotPayoutFlight = useCallback(({
+    from,
+    to,
+    amount,
+    delayMs = 0,
+    durationMs = ANIM_TIMINGS.baseMs + 240,
+    arcHeight = 48,
+  }) => {
+    if (!from || !to) return null;
+    const now = Date.now();
+    const id = `pot-payout-${now}-${Math.random().toString(16).slice(2)}`;
+    const flight = {
+      id,
+      kind: 'payout',
+      from,
+      to,
+      amount,
+      startAt: now + delayMs,
+      durationMs,
+      arcHeight,
+      createdAt: now,
+    };
+    queueScaffoldFlight({
+      kind: 'chip:payout',
+      from,
+      to,
+      payload: { amount },
+      delayMs,
+      durationMs,
+    });
+    setPotPayoutFlights((prev) => [...prev, flight]);
+    const ttlMs = Math.max(0, delayMs + durationMs + ANIM_TIMINGS.chipFadeMs + 180);
+    const timerId = scheduleAnimationTimeout(() => removePotPayoutFlight(id), ttlMs);
+    potPayoutTimersRef.current.set(id, timerId);
+    return flight;
+  }, [queueScaffoldFlight, removePotPayoutFlight, scheduleAnimationTimeout]);
+
+  useEffect(() => {
+    if (chipFlights.length === 0 && potPayoutFlights.length === 0) return undefined;
+    let frameId = 0;
+    const tick = () => {
+      setChipFlightNow(Date.now());
+      frameId = requestAnimationFrame(tick);
+    };
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [chipFlights.length, potPayoutFlights.length]);
+
+  useEffect(() => (
+    () => {
+      animationGenerationRef.current += 1;
+      clearPendingAnimationTimeouts();
+      clearChipFlights();
+      clearPotPayoutFlights();
+    }
+  ), [clearChipFlights, clearPendingAnimationTimeouts, clearPotPayoutFlights]);
+
+  useEffect(() => {
+    if (previousConnectedRef.current !== connected) {
+      hardResetVisualState();
+      previousConnectedRef.current = connected;
+    }
+  }, [connected, hardResetVisualState]);
+
+  useEffect(() => {
+    if (previousTableIdRef.current !== (tableId ?? null)) {
+      previousTableIdRef.current = tableId ?? null;
+      hardResetVisualState();
+    }
+  }, [tableId, hardResetVisualState]);
+
+  useEffect(() => {
+    const previousHand = previousHandNumberRef.current;
+    if (previousHand !== null && handNumber !== previousHand) {
+      hardResetVisualState();
+    }
+    previousHandNumberRef.current = handNumber;
+  }, [handNumber, hardResetVisualState]);
+
+  useEffect(() => {
+    const signature = seats
+      .map((seat, idx) => (
+        seat
+          ? `${idx}:${seat.user_id ?? seat.username ?? 'occupied'}`
+          : `${idx}:empty`
+      ))
+      .join('|');
+    if (seatOccupancySignatureRef.current && seatOccupancySignatureRef.current !== signature) {
+      hardResetVisualState();
+    }
+    seatOccupancySignatureRef.current = signature;
+  }, [seats, hardResetVisualState]);
+
+  useEffect(() => {
+    if (!connected || handNumber <= 0 || phase !== 'preflop') return;
+    if (dealtHandRef.current === handNumber) return;
+    dealtHandRef.current = handNumber;
+    const generation = animationGenerationRef.current;
+
+    const timeoutId = scheduleAnimationTimeout(() => {
+      const deck = getDeckAnchorPoint();
+      if (!deck) return;
+      const activeSeats = seats
+        .map((seat, idx) => ({ seat, idx }))
+        .filter(({ seat }) => seat && seat.status !== 'sit_out' && seat.status !== 'seduto_out');
+
+      const flights = [];
+      activeSeats.forEach(({ idx }, order) => {
+        const to = getSeatCardPoint(idx) ?? getSeatAnchorPoint(idx);
+        if (!to) return;
+        for (let cardIdx = 0; cardIdx < 2; cardIdx += 1) {
+          const delayMs = (order * 85) + (cardIdx * 110);
+          const flight = createFlightScaffold({
+            kind: 'deal-hole',
+            from: deck,
+            to: { x: to.x + (cardIdx === 0 ? -12 : 12), y: to.y + (mySeat === idx ? -4 : 0) },
+            delayMs,
+            durationMs: Math.max(ANIM_TIMINGS.quickMs + 180, 420),
+          });
+          flight.animKey = `deal-hole-${handNumber}-${idx}-${cardIdx}`;
+          flight.size = mySeat === idx ? 'md' : 'sm';
+          flight.rotateFrom = cardIdx === 0 ? -16 : 16;
+          flight.rotateTo = cardIdx === 0 ? -4 : 4;
+          flights.push(flight);
+          queueScaffoldFlight({
+            kind: flight.kind,
+            from: flight.from,
+            to: flight.to,
+            delayMs: flight.delayMs,
+            durationMs: flight.durationMs,
+          });
+        }
+      });
+
+      spawnCardFlights(flights, generation);
+    }, 70, generation);
+
+    return () => {
+      animationTimeoutsRef.current.delete(timeoutId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    connected,
+    handNumber,
+    phase,
+    seats,
+    mySeat,
+    getDeckAnchorPoint,
+    getSeatCardPoint,
+    getSeatAnchorPoint,
+    queueScaffoldFlight,
+    scheduleAnimationTimeout,
+    spawnCardFlights,
+  ]);
+
+  useEffect(() => {
+    const previousCommunity = previousCommunityRef.current ?? [];
+    const currentCommunity = Array.isArray(community) ? community : [];
+    const newIndexes = [];
+
+    for (let i = 0; i < 5; i += 1) {
+      if (currentCommunity[i] && !previousCommunity[i]) newIndexes.push(i);
+    }
+
+    previousCommunityRef.current = [...currentCommunity];
+
+    if (newIndexes.length === 0) {
+      if (currentCommunity.length === 0) setCommunityRevealTokens({});
+      return;
+    }
+    const generation = animationGenerationRef.current;
+
+    const timeoutId = scheduleAnimationTimeout(() => {
+      const deck = getDeckAnchorPoint();
+      const flights = [];
+      const tokenUpdates = {};
+      const now = Date.now();
+
+      newIndexes.forEach((index, order) => {
+        tokenUpdates[index] = `community-${now}-${index}-${currentCommunity[index]}`;
+        const to = getCommunityCardPoint(index);
+        if (!deck || !to) return;
+        const flight = createFlightScaffold({
+          kind: 'deal-community',
+          from: deck,
+          to,
+          delayMs: order * 120,
+          durationMs: Math.max(ANIM_TIMINGS.baseMs + 100, 560),
+        });
+        flight.animKey = `deal-community-${handNumber}-${index}`;
+        flight.size = 'md';
+        flight.rotateFrom = order % 2 === 0 ? -12 : 12;
+        flight.rotateTo = 0;
+        flights.push(flight);
+        queueScaffoldFlight({
+          kind: flight.kind,
+          from: flight.from,
+          to: flight.to,
+          delayMs: flight.delayMs,
+          durationMs: flight.durationMs,
+        });
+      });
+
+      setCommunityRevealTokens((prev) => ({ ...prev, ...tokenUpdates }));
+      spawnCardFlights(flights, generation);
+    }, 45, generation);
+
+    return () => {
+      animationTimeoutsRef.current.delete(timeoutId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [community, getDeckAnchorPoint, getCommunityCardPoint, handNumber, queueScaffoldFlight, scheduleAnimationTimeout, spawnCardFlights]);
+
+  useEffect(() => {
+    if (!Array.isArray(showdownResults) || showdownResults.length === 0) {
+      showdownSignatureRef.current = '';
+      setShowdownRevealTokens({});
+      return;
+    }
+    const signature = showdownResults
+      .map((result) => `${result?.seat ?? 'x'}:${(result?.cards ?? []).join(',')}`)
+      .join('|');
+    if (signature === showdownSignatureRef.current) return;
+    showdownSignatureRef.current = signature;
+    const now = Date.now();
+    const tokens = {};
+    showdownResults.forEach((result, idx) => {
+      const seatIdx = Number(result?.seat);
+      if (!Number.isInteger(seatIdx) || seatIdx < 0 || seatIdx >= MAX_SEATS) return;
+      if (!Array.isArray(result?.cards) || result.cards.length === 0) return;
+      tokens[seatIdx] = { token: `showdown-${now}-${seatIdx}`, delayMs: idx * 120 };
+    });
+    setShowdownRevealTokens(tokens);
+  }, [showdownResults]);
+
+  useEffect(() => {
+    if (!handWinner || !connected) {
+      if (!handWinner) {
+        lastWinnerAnimKeyRef.current = '';
+        clearPotPayoutFlights();
+      }
+      return;
+    }
+
+    const potPoint = getPotAnchorPoint();
+    if (!potPoint) return;
+
+    const winnerEntries = (handWinner.is_split
+      ? (Array.isArray(handWinner.players) ? handWinner.players : [])
+      : [{ seat: handWinner.seat, amount: handWinner.amount, name: handWinner.name }])
+      .map((winner) => {
+        const seatFromPayload = Number(winner?.seat);
+        const bySeat = Number.isInteger(seatFromPayload) ? seatFromPayload : null;
+        const byName = bySeat === null && winner?.name
+          ? seats.findIndex((seat) => seat?.username === winner.name)
+          : -1;
+        const seatIdx = bySeat ?? (byName >= 0 ? byName : null);
+        if (seatIdx === null || seatIdx < 0 || seatIdx >= MAX_SEATS) return null;
+        const to = getSeatStackPoint(seatIdx) ?? getSeatAnchorPoint(seatIdx);
+        if (!to) return null;
+        return {
+          seatIdx,
+          to,
+          amount: Math.abs(Number(winner?.amount ?? 0)),
+        };
+      })
+      .filter(Boolean);
+
+    if (winnerEntries.length === 0) return;
+
+    const winnerKey = `${handNumber}|${handWinner.is_split ? 'split' : 'single'}|${winnerEntries.map((w) => `${w.seatIdx}:${w.amount}`).join(',')}`;
+    if (lastWinnerAnimKeyRef.current === winnerKey) return;
+    lastWinnerAnimKeyRef.current = winnerKey;
+    clearPotPayoutFlights();
+
+    const fallbackAmount = Math.abs(Number(handWinner.pot ?? pot ?? 0));
+    const splitFallback = winnerEntries.length > 0 ? Math.max(1, Math.floor(fallbackAmount / winnerEntries.length)) : fallbackAmount;
+
+    winnerEntries.forEach((winner, idx) => {
+      const distance = Math.hypot(winner.to.x - potPoint.x, winner.to.y - potPoint.y);
+      enqueuePotPayoutFlight({
+        from: potPoint,
+        to: winner.to,
+        amount: winner.amount > 0 ? winner.amount : splitFallback,
+        delayMs: 90 + (idx * (handWinner.is_split ? 150 : 90)),
+        durationMs: ANIM_TIMINGS.baseMs + 250,
+        arcHeight: Math.min(132, Math.max(40, distance * 0.22)),
+      });
+    });
+  }, [
+    handWinner,
+    connected,
+    handNumber,
+    seats,
+    pot,
+    getPotAnchorPoint,
+    getSeatStackPoint,
+    getSeatAnchorPoint,
+    clearPotPayoutFlights,
+    enqueuePotPayoutFlight,
+  ]);
+
+  useEffect(() => {
+    if (!tableStageRef.current) return;
+
+    const currentSnapshot = {
+      phase,
+      handNumber,
+      seats: seats.map((seat) => (
+        seat
+          ? {
+              bet_in_round: Number(seat.bet_in_round ?? 0),
+              last_action: (seat.last_action ?? '').toLowerCase(),
+              status: seat.status ?? null,
+            }
+          : null
+      )),
+    };
+
+    const previousSnapshot = previousTableSnapshotRef.current;
+    if (!previousSnapshot) {
+      previousTableSnapshotRef.current = currentSnapshot;
+      return;
+    }
+
+    const potPoint = getPotAnchorPoint();
+    const handProgressed = handNumber !== previousSnapshot.handNumber;
+    const streetChanged = previousSnapshot.phase !== phase;
+    const shouldCollectToPot = (streetChanged || handProgressed)
+      && previousSnapshot.phase
+      && previousSnapshot.phase !== 'waiting'
+      && previousSnapshot.phase !== 'in_attesa';
+
+    if (shouldCollectToPot && potPoint) {
+      const previousBets = previousSnapshot.seats
+        .map((seat, idx) => ({ idx, amount: Number(seat?.bet_in_round ?? 0) }))
+        .filter((row) => row.amount > 0);
+
+      previousBets.forEach((row, i) => {
+        const from = getSeatBetPoint(row.idx);
+        const delayStep = ANIM_TIMINGS.chipStaggerMinMs + Math.round(Math.random() * (ANIM_TIMINGS.chipStaggerMaxMs - ANIM_TIMINGS.chipStaggerMinMs));
+        const distance = from ? Math.hypot(potPoint.x - from.x, potPoint.y - from.y) : 0;
+        enqueueChipFlight({
+          kind: 'collect',
+          from,
+          to: potPoint,
+          amount: row.amount,
+          delayMs: i * delayStep,
+          durationMs: ANIM_TIMINGS.baseMs + 140,
+          arcHeight: Math.min(120, Math.max(36, distance * 0.24)),
+        });
+      });
+    }
+
+    const bettingActions = new Set(['bet', 'call', 'raise', 'allin', 'all-in']);
+    if (!handProgressed) {
+      seats.forEach((seat, idx) => {
+        const previousSeat = previousSnapshot.seats[idx];
+        if (!seat || !previousSeat) return;
+
+        const previousBet = Number(previousSeat.bet_in_round ?? 0);
+        const currentBet = Number(seat.bet_in_round ?? 0);
+        const action = (seat.last_action ?? '').toLowerCase();
+        if (currentBet <= previousBet || !bettingActions.has(action)) return;
+
+        const from = getSeatStackPoint(idx);
+        const to = getSeatBetPoint(idx);
+        const chipDelta = currentBet - previousBet;
+        const distance = from && to ? Math.hypot(to.x - from.x, to.y - from.y) : 0;
+        const delayStep = ANIM_TIMINGS.chipStaggerMinMs + Math.round(Math.random() * (ANIM_TIMINGS.chipStaggerMaxMs - ANIM_TIMINGS.chipStaggerMinMs));
+        enqueueChipFlight({
+          kind: 'bet',
+          from,
+          to,
+          amount: chipDelta,
+          delayMs: idx * delayStep,
+          durationMs: ANIM_TIMINGS.quickMs + 220,
+          arcHeight: Math.min(96, Math.max(24, distance * 0.2)),
+        });
+      });
+    }
+
+    previousTableSnapshotRef.current = currentSnapshot;
+  }, [
+    seats,
+    phase,
+    handNumber,
+    getPotAnchorPoint,
+    getSeatStackPoint,
+    getSeatBetPoint,
+    enqueueChipFlight,
+  ]);
 
   // ── Info header ───────────────────────────────────────────────────────────
   const blindsLabel  = tableConfig ? `€${tableConfig.small_blind}/${tableConfig.big_blind}` : '–/–';
@@ -868,17 +1732,20 @@ export default function PokerTable({
 
         {/* ── Area tavolo ───────────────────────────────────────────────── */}
         <div style={{ flex: 1, position: 'relative', padding: '14px 18px 82px' }}>
-          <div style={{ position: 'relative', width: '100%', height: '100%', maxWidth: 900, margin: '0 auto' }}>
+          <div
+            ref={tableStageRef}
+            style={{ position: 'relative', width: '100%', height: '100%', maxWidth: 900, margin: '0 auto' }}
+          >
 
             {/* Feltro */}
-            <div style={{ position: 'absolute', inset: '8% 3%', background: 'radial-gradient(ellipse at center,#2d7a4a 0%,#1a5233 55%,#0e2e1c 100%)', borderRadius: '50%', border: '8px solid #3a2a12', boxShadow: 'inset 0 0 40px rgba(0,0,0,0.35),0 20px 60px rgba(0,0,0,0.55),inset 0 0 80px rgba(45,122,74,0.15)' }}>
+            <div ref={feltRef} style={{ position: 'absolute', inset: '8% 3%', background: 'radial-gradient(ellipse at center,#2d7a4a 0%,#1a5233 55%,#0e2e1c 100%)', borderRadius: '50%', border: '8px solid #3a2a12', boxShadow: 'inset 0 0 40px rgba(0,0,0,0.35),0 20px 60px rgba(0,0,0,0.55),inset 0 0 80px rgba(45,122,74,0.15)' }}>
               <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', border: '1px solid rgba(212,175,55,0.18)' }} />
               <div style={{ position: 'absolute', top: '27%', left: '50%', transform: 'translateX(-50%)', fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'rgba(212,175,55,0.18)', fontStyle: 'italic', userSelect: 'none', whiteSpace: 'nowrap' }}>
                 Ridotto
               </div>
 
               {/* Centro: Piatto o attesa giocatori */}
-              <div style={{ position: 'absolute', top: '63%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', minWidth: 130 }}>
+              <div ref={potAnchorRef} style={{ position: 'absolute', top: '63%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', minWidth: 130 }}>
                 {waitingForPlayers != null ? (
                   <>
                     <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 15, color: 'rgba(245,241,232,0.65)', fontStyle: 'italic', marginBottom: 5 }}>
@@ -898,16 +1765,153 @@ export default function PokerTable({
                 )}
               </div>
 
+              <div
+                ref={deckAnchorRef}
+                style={{
+                  position: 'absolute',
+                  top: '45%',
+                  left: '37.5%',
+                  transform: 'translate(-50%,-50%) rotate(-9deg)',
+                  width: 50,
+                  height: 72,
+                  opacity: 0.9,
+                  pointerEvents: 'none',
+                }}
+              >
+                <Card card="back" size="md" cardBack={cardBack} />
+                <div style={{ position: 'absolute', inset: 0, transform: 'translate(4px,-3px)' }}>
+                  <Card card="back" size="md" cardBack={cardBack} />
+                </div>
+              </div>
+
               {/* Carte comuni */}
-              <div style={{ position: 'absolute', top: '45%', left: '50%', transform: 'translate(-50%,-50%)', display: 'flex', gap: 5 }}>
+              <div ref={communityAnchorRef} style={{ position: 'absolute', top: '45%', left: '50%', transform: 'translate(-50%,-50%)', display: 'flex', gap: 5 }}>
                 {[0, 1, 2, 3, 4].map((i) => (
-                  <div key={i} style={{ transition: 'opacity 0.35s,transform 0.35s', opacity: community[i] ? 1 : 0, transform: community[i] ? 'translateY(0)' : 'translateY(-8px)' }}>
+                  <div
+                    key={i}
+                    ref={(node) => setCommunityCardRef(i, node)}
+                    style={{ transition: 'opacity 0.35s,transform 0.35s', opacity: community[i] ? 1 : 0, transform: community[i] ? 'translateY(0)' : 'translateY(-8px)' }}
+                  >
                     {community[i]
-                      ? <Card card={community[i]} size="md" cardBack={cardBack} />
+                      ? (
+                        communityRevealTokens[i]
+                          ? (
+                            <FlipRevealCard
+                              card={community[i]}
+                              size="md"
+                              cardBack={cardBack}
+                              triggerKey={`${communityRevealTokens[i]}-${community[i]}`}
+                              durationMs={Math.max(ANIM_TIMINGS.revealMinMs, 620)}
+                            />
+                          )
+                          : <Card card={community[i]} size="md" cardBack={cardBack} />
+                      )
                       : <div style={{ width: 50, height: 72, border: '1px dashed rgba(212,175,55,0.07)', borderRadius: 5 }} />
                     }
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Overlay scaffolding per animazioni future (carte/chips/piatto) */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                pointerEvents: 'none',
+                overflow: 'hidden',
+                zIndex: TABLE_ANIMATION_TOKENS.zLayers.overlays,
+              }}
+            >
+              <div ref={(node) => setOverlayLayerRef('cards', node)} data-anim-layer="cards-flight" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                {cardFlights.map((flight) => (
+                  <FlightCard key={flight.id} flight={flight} cardBack={cardBack} />
+                ))}
+              </div>
+              <div ref={(node) => setOverlayLayerRef('chips', node)} data-anim-layer="chips-flight" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                {chipFlights.map((flight) => {
+                  const elapsedMs = chipFlightNow - flight.startAt;
+                  const baseProgress = Math.max(0, Math.min(1, elapsedMs / Math.max(1, flight.durationMs)));
+                  const easedProgress = 1 - ((1 - baseProgress) ** 3);
+                  const fadeProgress = elapsedMs > flight.durationMs
+                    ? Math.max(0, 1 - ((elapsedMs - flight.durationMs) / Math.max(1, ANIM_TIMINGS.chipFadeMs)))
+                    : 1;
+                  const opacity = elapsedMs < 0 ? 0 : fadeProgress;
+                  if (opacity <= 0) return null;
+
+                  const x = flight.from.x + ((flight.to.x - flight.from.x) * easedProgress);
+                  const baseY = flight.from.y + ((flight.to.y - flight.from.y) * easedProgress);
+                  const arcLift = Math.sin(Math.PI * baseProgress) * flight.arcHeight;
+                  const y = baseY - arcLift;
+                  const isCollect = flight.kind === 'collect';
+                  const glow = isCollect ? '0 0 14px rgba(212,175,55,0.55)' : '0 0 10px rgba(232,194,82,0.42)';
+                  const stackCount = Math.max(2, Math.min(5, Math.ceil((flight.amount ?? 0) / 25)));
+
+                  return (
+                    <div key={flight.id} style={{ position: 'absolute', left: x, top: y, transform: 'translate(-50%,-50%)', opacity, pointerEvents: 'none' }}>
+                      <div style={{ position: 'relative', width: 24, height: 10 + (stackCount * 2.5), filter: `drop-shadow(${glow})` }}>
+                        {Array.from({ length: stackCount }).map((_, stackIdx) => (
+                          <div
+                            key={stackIdx}
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              bottom: stackIdx * 2.5,
+                              width: 24,
+                              height: 7,
+                              borderRadius: 5,
+                              background: isCollect
+                                ? 'radial-gradient(ellipse at 30% 30%,#E8C252,#8f761f)'
+                                : 'radial-gradient(ellipse at 30% 30%,#f0ce69,#9a7b24)',
+                              border: '0.6px solid rgba(0,0,0,0.45)',
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div ref={(node) => setOverlayLayerRef('pot', node)} data-anim-layer="pot-effects" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                {potPayoutFlights.map((flight) => {
+                  const elapsedMs = chipFlightNow - flight.startAt;
+                  const baseProgress = Math.max(0, Math.min(1, elapsedMs / Math.max(1, flight.durationMs)));
+                  const easedProgress = 1 - ((1 - baseProgress) ** 3);
+                  const fadeProgress = elapsedMs > flight.durationMs
+                    ? Math.max(0, 1 - ((elapsedMs - flight.durationMs) / Math.max(1, ANIM_TIMINGS.chipFadeMs)))
+                    : 1;
+                  const opacity = elapsedMs < 0 ? 0 : fadeProgress;
+                  if (opacity <= 0) return null;
+
+                  const x = flight.from.x + ((flight.to.x - flight.from.x) * easedProgress);
+                  const baseY = flight.from.y + ((flight.to.y - flight.from.y) * easedProgress);
+                  const arcLift = Math.sin(Math.PI * baseProgress) * flight.arcHeight;
+                  const y = baseY - arcLift;
+                  const stackCount = Math.max(2, Math.min(7, Math.ceil((flight.amount ?? 0) / 20)));
+
+                  return (
+                    <div key={flight.id} style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%,-50%) scale(${0.95 + (0.05 * easedProgress)})`, opacity, pointerEvents: 'none' }}>
+                      <div style={{ position: 'relative', width: 24, height: 10 + (stackCount * 2.5), filter: 'drop-shadow(0 0 16px rgba(212,175,55,0.65))' }}>
+                        {Array.from({ length: stackCount }).map((_, stackIdx) => (
+                          <div
+                            key={stackIdx}
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              bottom: stackIdx * 2.5,
+                              width: 24,
+                              height: 7,
+                              borderRadius: 5,
+                              background: 'radial-gradient(ellipse at 30% 30%,#F0CF6A,#9C7B23)',
+                              border: '0.6px solid rgba(0,0,0,0.45)',
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -927,6 +1931,11 @@ export default function PokerTable({
                 phase={phase}
                 cardBack={cardBack}
                 showdownResult={showdownResults?.find((r) => r.seat === idx) ?? null}
+                showdownReveal={showdownRevealTokens[idx] ?? null}
+                anchorRef={(node) => setSeatAnchorRef(idx, node)}
+                cardAnchorRef={(node) => setSeatCardAnchorRef(idx, node)}
+                stackAnchorRef={(node) => setSeatStackAnchorRef(idx, node)}
+                betAnchorRef={(node) => setSeatBetAnchorRef(idx, node)}
                 onEmptyClick={() => handleSeatClick(idx)}
                 seatDelta={seatDeltas[String(idx)] ?? seatDeltas[idx] ?? null}
               />
