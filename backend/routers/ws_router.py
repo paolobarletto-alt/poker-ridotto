@@ -902,6 +902,13 @@ async def _handle_join_seat(
                     started_at=_now_utc(),
                     last_activity_at=_now_utc(),
                 ))
+            seated_count_result = await db.execute(
+                select(func.count()).select_from(TableSeat).where(
+                    TableSeat.table_id == db_table.id,
+                    TableSeat.status == "active",
+                )
+            )
+            seated_count_db = seated_count_result.scalar() or 0
             await db.commit()
 
         display = user.display_name or user.username
@@ -918,7 +925,7 @@ async def _handle_join_seat(
         })
         await game_manager.broadcast_state(table_id)
 
-        seated = game.players_active_count()
+        seated = seated_count_db
         if not game.hand_in_progress() and game.num_mano == 0:
             if seated >= db_table.max_seats:
                 asyncio.create_task(_delayed_start_hand(table_id, db_table, game, delay=3))

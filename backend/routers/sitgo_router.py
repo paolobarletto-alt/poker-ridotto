@@ -298,8 +298,7 @@ async def _start_tournament(tournament_id: uuid.UUID):
             first_level = schedule[0]
             first_sb = first_level["small_blind"]
             first_bb = first_level["big_blind"]
-            prize_pool = tournament.buy_in * len(registrations)
-            tournament.prize_pool = prize_pool
+            tournament.prize_pool = 0
             tournament.payout_structure = _payout_structure_for_players(len(registrations))
 
             poker_table = PokerTable(
