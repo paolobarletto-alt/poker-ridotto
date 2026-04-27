@@ -1604,7 +1604,7 @@ async def _post_action_advance(
 
         active = game.players_active_count()
         if active >= db_table.min_players:
-            asyncio.create_task(_delayed_start_hand(table_id, db_table, game, delay=3, show_countdown=False))
+            asyncio.create_task(_delayed_start_hand(table_id, db_table, game, delay=5, show_countdown=False))
         else:
             await game_manager.broadcast(table_id, {
                 "type": "waiting_players",
@@ -1706,7 +1706,7 @@ async def _run_out_cards(table_id: str, db_table: Any, num_mano: int) -> None:
         tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
         db_table_latest = tbl_res.scalar_one_or_none()
     if db_table_latest and active >= db_table_latest.min_players:
-        asyncio.create_task(_delayed_start_hand(table_id, db_table_latest, game, delay=3, show_countdown=False))
+        asyncio.create_task(_delayed_start_hand(table_id, db_table_latest, game, delay=5, show_countdown=False))
     else:
         await game_manager.broadcast(table_id, {
             "type": "waiting_players",
