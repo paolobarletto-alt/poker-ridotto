@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { tablesApi } from '../api/tables';
+import { useViewport } from '../hooks/useViewport';
 
 const BLIND_SCHEDULES = {
   slow:   [{ sb: 25, bb: 50 }, { sb: 50, bb: 100 }, { sb: 75, bb: 150 }, { sb: 150, bb: 300 }],
@@ -81,6 +82,7 @@ function NumInput({ label, value, onChange, min, max, step = 1, readOnly = false
 
 export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash', forcedType = null }) {
   const navigate = useNavigate();
+  const { isMobile } = useViewport();
   const normalizedForcedType = forcedType === 'sitgo' ? 'sitgo' : forcedType === 'cash' ? 'cash' : null;
   const initialType = normalizedForcedType ?? (defaultType === 'sitgo' ? 'sitgo' : 'cash');
   const [type, setType] = useState(initialType);
@@ -209,7 +211,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
   return (
     <div style={css.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={css.panel}>
-        <div style={css.header}>
+        <div style={{ ...css.header, padding: isMobile ? '20px 16px 14px' : css.header.padding }}>
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 18, background: 'none', border: 'none', color: 'rgba(245,241,232,0.4)', fontSize: 18, cursor: 'pointer' }}>✕</button>
           <div style={{ fontSize: 9.5, letterSpacing: '0.25em', color: 'rgba(245,241,232,0.45)', fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>NUOVA PARTITA</div>
           <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: '#F5F1E8' }}>
@@ -217,7 +219,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
           </div>
         </div>
 
-        <div style={css.body}>
+        <div style={{ ...css.body, padding: isMobile ? '16px' : css.body.padding }}>
           {!normalizedForcedType && (
             <div>
               <div style={css.sectionTitle}>TIPO DI GIOCO</div>
@@ -256,7 +258,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
               {visibleErrors.name && <div style={css.errorMsg}>{visibleErrors.name}</div>}
             </div>
             {type === 'cash' ? (
-              <div style={css.row2}>
+               <div style={{ ...css.row2, gridTemplateColumns: isMobile ? '1fr' : css.row2.gridTemplateColumns }}>
                 <div>
                   <label style={css.label}>Giocatori minimi</label>
                   <select value={minPlayers} onChange={(e) => setMinPlayers(Number(e.target.value))} style={{ ...css.select, ...(visibleErrors.minPlayers ? css.inputError : {}) }}>
@@ -312,11 +314,11 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
           {type === 'cash' && (
             <div>
               <div style={css.sectionTitle}>BLINDS E BUY-IN</div>
-              <div style={{ ...css.row2, marginBottom: 14 }}>
+              <div style={{ ...css.row2, gridTemplateColumns: isMobile ? '1fr' : css.row2.gridTemplateColumns, marginBottom: 14 }}>
                 <NumInput label="Blind piccolo" value={sb} onChange={setSb} min={5} step={5} />
                 <NumInput label="Blind grande (auto)" value={bb} onChange={() => { }} readOnly />
               </div>
-              <div style={css.row2}>
+              <div style={{ ...css.row2, gridTemplateColumns: isMobile ? '1fr' : css.row2.gridTemplateColumns }}>
                 <NumInput label="Buy-in minimo" value={minBuyin} onChange={setMinBuyin} min={bb * 10} step={bb} error={visibleErrors.minBuyin} />
                 <div>
                   <NumInput label="Buy-in massimo" value={maxBuyin} onChange={setMaxBuyin} min={minBuyin} disabled={noMaxBuyin} error={visibleErrors.maxBuyin} />
@@ -382,7 +384,7 @@ export default function CreateTableModal({ isOpen, onClose, defaultType = 'cash'
           )}
         </div>
 
-        <div style={css.footer}>
+        <div style={{ ...css.footer, padding: isMobile ? '14px 16px' : css.footer.padding, flexDirection: isMobile ? 'column' : 'row' }}>
           <button style={css.btnGhost} onClick={onClose}>Annulla</button>
           <button style={{ ...css.btnGold, opacity: loading ? 0.5 : 1, cursor: loading ? 'not-allowed' : 'pointer' }} onClick={handleSubmit} disabled={loading}>
             {loading ? 'Creazione...' : (type === 'sitgo' ? 'CREA TORNEO' : 'CREA TAVOLO')}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useViewport } from '../hooks/useViewport';
 
 const S = {
   overlay: {
@@ -19,6 +20,7 @@ const S = {
 };
 
 export default function BuyinDialog({ isOpen, onClose, seat, tableConfig, userBalance, onConfirm }) {
+  const { isMobile } = useViewport();
   const tc = tableConfig ?? {};
   const balance = userBalance ?? 0;
   const minBuyin = tc.min_buyin ?? 100;
@@ -111,7 +113,7 @@ export default function BuyinDialog({ isOpen, onClose, seat, tableConfig, userBa
         </div>
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexDirection: isMobile ? 'column' : 'row' }}>
           <button onClick={onClose} style={{
             flex: 1, padding: '12px 0', background: 'transparent',
             border: '1px solid rgba(245,241,232,0.15)', color: 'rgba(245,241,232,0.6)',

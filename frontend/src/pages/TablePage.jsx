@@ -11,6 +11,7 @@ import { useTableChat } from '../hooks/useTableChat';
 import PokerTable from '../components/Table';
 import { GoldButton } from '../components/Shell';
 import { useAuth } from '../context/AuthContext';
+import { useViewport } from '../hooks/useViewport';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Overlay conferma abbandono + riepilogo sessione
@@ -31,8 +32,8 @@ function LeaveOverlay({ step, pnl, isTournament, tournamentResult, onConfirm, on
       <div style={{
         background: 'rgba(12,18,14,0.97)',
         border: '1px solid rgba(212,175,55,0.35)',
-        padding: '40px 48px',
-        minWidth: 340, maxWidth: 420,
+        padding: '28px 20px',
+        width: 'min(420px, 92vw)',
         textAlign: 'center',
         boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
       }}>
@@ -123,6 +124,7 @@ export default function TablePage() {
   const { id: tableId } = useParams();
   const navigate        = useNavigate();
   const { user }        = useAuth();
+  const { isMobile }    = useViewport();
 
   // Bridge ref: usePokerTable dispatches chat events → useTableChat receives them
   const chatCallbackRef = useRef(null);
@@ -192,7 +194,7 @@ export default function TablePage() {
   }, [navigate]);
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', overflow: isMobile ? 'auto' : 'hidden' }}>
 
       {/* ── Overlay connessione (caricamento / riconnessione / persa) ───────── */}
       {!connected && (
@@ -255,7 +257,7 @@ export default function TablePage() {
       )}
 
       {/* ── Tavolo ───────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
         <PokerTable
           tableId={tableId}
           tableState={tableState}

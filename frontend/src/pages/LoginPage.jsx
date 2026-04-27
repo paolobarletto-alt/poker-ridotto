@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useViewport } from '../hooks/useViewport';
 
 // ————— Shared primitives —————
 
@@ -303,7 +304,7 @@ function LoginForm({ onSuccess }) {
 
 // ————— Register form —————
 
-function RegisterForm({ onSuccess }) {
+function RegisterForm({ onSuccess, isMobile }) {
   const { register } = useAuth();
   const [fields, setFields] = useState({
     username: '', email: '', password: '', display_name: '', invite_code: '',
@@ -334,7 +335,7 @@ function RegisterForm({ onSuccess }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '0 14px' }}>
         <Field label="USERNAME" value={fields.username} onChange={set('username')} required />
         <Field label="NOME VISUALIZZATO" value={fields.display_name} onChange={set('display_name')} placeholder="opzionale" />
       </div>
@@ -378,6 +379,7 @@ function RegisterForm({ onSuccess }) {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { isMobile } = useViewport();
   const [tab, setTab] = useState('login'); // 'login' | 'register'
 
   const onSuccess = () => navigate('/lobby');
@@ -444,9 +446,9 @@ export default function LoginPage() {
         <div style={{ width: '100%', maxWidth: 420, position: 'relative', zIndex: 2 }}>
 
           {/* Logo */}
-          <div style={{ textAlign: 'center', marginBottom: 44 }}>
+          <div style={{ textAlign: 'center', marginBottom: isMobile ? 28 : 44 }}>
             <div style={{
-              fontFamily: 'Playfair Display, serif', fontSize: 46, fontWeight: 700,
+              fontFamily: 'Playfair Display, serif', fontSize: isMobile ? 38 : 46, fontWeight: 700,
               color: '#D4AF37', letterSpacing: '-0.025em', lineHeight: 1,
             }}>
               Micetti<span style={{ color: '#F5F1E8', fontStyle: 'italic', fontWeight: 400 }}>.</span>
@@ -499,7 +501,7 @@ export default function LoginPage() {
             </div>
 
             {/* Form area */}
-            <div style={{ padding: '32px 30px 28px' }}>
+            <div style={{ padding: isMobile ? '24px 16px 20px' : '32px 30px 28px' }}>
               <div style={{
                 fontFamily: 'Playfair Display, serif', fontSize: 21, color: '#F5F1E8',
                 fontWeight: 500, marginBottom: 26,
@@ -509,7 +511,7 @@ export default function LoginPage() {
 
               {tab === 'login'
                 ? <LoginForm onSuccess={onSuccess} />
-                : <RegisterForm onSuccess={onSuccess} />
+                : <RegisterForm onSuccess={onSuccess} isMobile={isMobile} />
               }
             </div>
           </div>

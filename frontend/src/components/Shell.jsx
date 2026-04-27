@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { tablesApi } from '../api/tables';
+import { useViewport } from '../hooks/useViewport';
 
 // ————— Sidebar —————
 const ROUTE_MAP = {
@@ -146,10 +147,16 @@ export function Sidebar({ user }) {
 
 // ————— TopBar —————
 export function TopBar({ title, subtitle, actions }) {
+  const { isMobile } = useViewport();
   return (
     <div style={{
-      padding: '22px 32px 18px', display: 'flex', alignItems: 'flex-end',
-      justifyContent: 'space-between', borderBottom: '2px solid rgba(212,175,55,0.22)',
+      padding: isMobile ? '16px 16px 14px' : '22px 32px 18px',
+      display: 'flex',
+      alignItems: isMobile ? 'flex-start' : 'flex-end',
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: isMobile ? 12 : 0,
+      justifyContent: 'space-between',
+      borderBottom: '2px solid rgba(212,175,55,0.22)',
     }}>
       <div>
         <div style={{
@@ -157,11 +164,11 @@ export function TopBar({ title, subtitle, actions }) {
           color: 'rgba(245,241,232,0.45)', letterSpacing: '0.22em', marginBottom: 6,
         }}>{subtitle}</div>
         <div style={{
-          fontFamily: 'Playfair Display, serif', fontSize: 32, fontWeight: 500,
+          fontFamily: 'Playfair Display, serif', fontSize: isMobile ? 26 : 32, fontWeight: 500,
           color: '#F5F1E8', letterSpacing: '-0.015em', lineHeight: 1,
         }}>{title}</div>
       </div>
-      <div style={{ display: 'flex', gap: 10 }}>{actions}</div>
+      <div style={{ display: 'flex', gap: 10, width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'flex-end' : 'flex-start' }}>{actions}</div>
     </div>
   );
 }
@@ -202,5 +209,86 @@ export function GoldButton({ children, onClick, variant = 'solid', size = 'md', 
     onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,175,55,0.08)'; e.currentTarget.style.borderColor = '#D4AF37'; }}
     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(212,175,55,0.4)'; }}
     >{children}</button>
+  );
+}
+
+export function AppFrame({ user, children }) {
+  const { isMobile } = useViewport();
+  const { pathname } = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname, isMobile]);
+
+  if (!isMobile) {
+    return (
+      <div style={{ display: 'flex', height: '100%', background: '#050505' }}>
+        <Sidebar user={user} />
+        <div style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ height: '100%', background: '#050505', position: 'relative' }}>
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 50,
+        height: 56,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 14px',
+        borderBottom: '1px solid rgba(212,175,55,0.22)',
+        background: 'rgba(10,10,10,0.96)',
+        backdropFilter: 'blur(8px)',
+      }}>
+        <button
+          onClick={() => setMenuOpen((prev) => !prev)}
+          style={{
+            width: 34,
+            height: 34,
+            border: '1px solid rgba(212,175,55,0.35)',
+            background: 'transparent',
+            color: '#D4AF37',
+            fontSize: 16,
+            cursor: 'pointer',
+          }}
+          aria-label="Apri menu"
+        >
+          ☰
+        </button>
+        <div style={{ fontFamily: 'Playfair Display, serif', color: '#D4AF37', fontSize: 24, lineHeight: 1 }}>
+          Micetti<span style={{ color: '#F5F1E8', fontStyle: 'italic', fontWeight: 400 }}>.</span>
+        </div>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', border: '1px solid rgba(212,175,55,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D4AF37', fontSize: 12, fontFamily: 'Playfair Display, serif' }}>
+          {(user?.avatar_initials ?? user?.username ?? '?').slice(0, 2).toUpperCase()}
+        </div>
+      </div>
+
+      {menuOpen && (
+        <div
+          onClick={() => setMenuOpen(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.72)' }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: 240, height: '100%', boxShadow: '8px 0 30px rgba(0,0,0,0.55)' }}
+          >
+            <Sidebar user={user} />
+          </div>
+        </div>
+      )}
+
+      <div style={{ height: '100%', overflowY: 'auto', paddingTop: 56 }}>
+        {children}
+      </div>
+    </div>
   );
 }

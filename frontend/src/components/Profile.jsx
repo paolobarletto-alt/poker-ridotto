@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { GoldButton } from './Shell';
+import { useViewport } from '../hooks/useViewport';
 // ————— Skeleton —————
 const shimmerStyle = (() => {
   if (typeof document !== 'undefined' && !document.getElementById('profile-shimmer')) {
@@ -76,6 +77,7 @@ function PLChart({ data }) {
 export default function Profile() {
   const { user, refreshUser, logout } = useAuth();
   const navigate = useNavigate();
+  const { isMobile } = useViewport();
 
   const [statsData, setStatsData] = useState({});
   const [gameHistory, setGameHistory] = useState([]);
@@ -168,23 +170,23 @@ export default function Profile() {
 
       {/* Header */}
       <div style={{
-        padding: '32px 32px 28px',
+        padding: isMobile ? '20px 16px 18px' : '32px 32px 28px',
         borderBottom: '1px solid rgba(212,175,55,0.08)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+        display: 'flex', alignItems: isMobile ? 'flex-start' : 'flex-end', justifyContent: 'space-between', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 14 : 0,
       }}>
-        <div style={{ display: 'flex', gap: 22, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: isMobile ? 14 : 22, alignItems: 'center' }}>
           <div style={{
-            width: 80, height: 80, borderRadius: '50%',
+            width: isMobile ? 64 : 80, height: isMobile ? 64 : 80, borderRadius: '50%',
             background: 'linear-gradient(135deg, #D4AF37, #8a6d1e)',
             color: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'Playfair Display, serif', fontSize: 34, fontWeight: 700,
+            fontFamily: 'Playfair Display, serif', fontSize: isMobile ? 28 : 34, fontWeight: 700,
             boxShadow: '0 6px 20px rgba(212,175,55,0.3)',
           }}>{initials}</div>
           <div>
             <div style={{ fontSize: 10, letterSpacing: '0.22em', color: 'rgba(245,241,232,0.5)', marginBottom: 5 }}>
               MEMBRO DAL {memberSince.toUpperCase()}
             </div>
-            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, color: '#F5F1E8', fontWeight: 500, letterSpacing: '-0.015em', lineHeight: 1 }}>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: isMobile ? 26 : 32, color: '#F5F1E8', fontWeight: 500, letterSpacing: '-0.015em', lineHeight: 1 }}>
               {displayName}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(245,241,232,0.6)', marginTop: 6, fontFamily: 'JetBrains Mono, monospace' }}>
@@ -201,8 +203,8 @@ export default function Profile() {
       </div>
 
       {/* Balance + chart */}
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 0, borderBottom: '1px solid rgba(212,175,55,0.08)' }}>
-        <div style={{ padding: '26px 32px', borderRight: '1px solid rgba(212,175,55,0.08)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '280px 1fr', gap: 0, borderBottom: '1px solid rgba(212,175,55,0.08)' }}>
+        <div style={{ padding: isMobile ? '18px 16px' : '26px 32px', borderRight: isMobile ? 'none' : '1px solid rgba(212,175,55,0.08)', borderBottom: isMobile ? '1px solid rgba(212,175,55,0.08)' : 'none' }}>
           <div style={{ fontSize: 10, letterSpacing: '0.22em', color: 'rgba(245,241,232,0.5)', marginBottom: 8 }}>SALDO</div>
           <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 38, color: '#F5F1E8', fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1, marginBottom: 4 }}>
             {fmt(balance)} <span style={{ fontSize: 18, color: 'rgba(245,241,232,0.5)' }}>chips</span>
@@ -217,19 +219,19 @@ export default function Profile() {
           }
           <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.55)', marginTop: 4 }}>tutto il tempo</div>
         </div>
-        <div style={{ padding: '26px 32px' }}>
+        <div style={{ padding: isMobile ? '18px 16px' : '26px 32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
             <div>
               <div style={{ fontSize: 10, letterSpacing: '0.22em', color: '#D4AF37', marginBottom: 4 }}>ANDAMENTO P/L</div>
               <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#F5F1E8' }}>Storico chips</div>
             </div>
           </div>
-          {loading ? <Skel w="100%" h={170} /> : <PLChart data={plData} />}
+          {loading ? <Skel w="100%" h={170} /> : <div style={{ overflowX: 'auto' }}><PLChart data={plData} /></div>}
         </div>
       </div>
 
       {/* Recent games */}
-      <div style={{ padding: '26px 32px 0' }}>
+      <div style={{ padding: isMobile ? '18px 16px 0' : '26px 32px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: 10, letterSpacing: '0.22em', color: '#D4AF37', marginBottom: 6 }}>STORICO PARTITE</div>
@@ -251,7 +253,7 @@ export default function Profile() {
             Nessuna partita giocata ancora
           </div>
         ) : (
-          <div style={{ border: '1px solid rgba(212,175,55,0.12)' }}>
+          <div style={{ border: '1px solid rgba(212,175,55,0.12)', overflowX: 'auto' }}>
             <div style={{
               display: 'grid', gridTemplateColumns: '1fr 2fr 0.7fr 0.7fr 1fr',
               padding: '11px 18px', background: 'rgba(212,175,55,0.04)',

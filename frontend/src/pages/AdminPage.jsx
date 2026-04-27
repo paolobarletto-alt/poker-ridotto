@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Sidebar, TopBar, GoldButton } from '../components/Shell';
+import { AppFrame, TopBar, GoldButton } from '../components/Shell';
 import api from '../api/client';
+import { useViewport } from '../hooks/useViewport';
 
 // ————— Shared primitives —————
 
@@ -501,6 +502,7 @@ function UsersTab() {
 export default function AdminPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { isMobile } = useViewport();
   const [tab, setTab] = useState('invites');
 
   useEffect(() => {
@@ -510,10 +512,8 @@ export default function AdminPage() {
   if (!user || !user.is_admin) return null;
 
   return (
-    <div style={{ display: 'flex', height: '100%', background: '#050505' }}>
-      <Sidebar user={user} />
-
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+    <AppFrame user={user}>
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: '100%' }}>
         <TopBar
           subtitle="PANNELLO ADMIN"
           title="Amministrazione"
@@ -530,17 +530,18 @@ export default function AdminPage() {
         />
 
         {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: '1px solid rgba(212,175,55,0.1)', background: '#0a0a0a' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(212,175,55,0.1)', background: '#0a0a0a', overflowX: 'auto' }}>
           {[['invites', '⬡ Inviti'], ['users', '◈ Utenti']].map(([id, label]) => {
             const active = tab === id;
             return (
               <button key={id} onClick={() => setTab(id)} style={{
-                padding: '14px 28px', background: 'transparent', border: 'none',
+                padding: isMobile ? '12px 16px' : '14px 28px', background: 'transparent', border: 'none',
                 borderBottom: active ? '2px solid #D4AF37' : '2px solid transparent',
                 color: active ? '#F5F1E8' : 'rgba(245,241,232,0.45)',
-                fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600,
+                fontFamily: 'Inter, sans-serif', fontSize: isMobile ? 11 : 12, fontWeight: 600,
                 letterSpacing: '0.14em', textTransform: 'uppercase',
                 cursor: 'pointer', transition: 'all 0.15s',
+                whiteSpace: 'nowrap',
               }}>
                 {label}
               </button>
@@ -553,6 +554,6 @@ export default function AdminPage() {
           {tab === 'invites' ? <InvitesTab /> : <UsersTab />}
         </div>
       </div>
-    </div>
+    </AppFrame>
   );
 }

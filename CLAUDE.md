@@ -46,3 +46,6 @@ cd backend && python poker_engine.py
 
 ## Regola operativa comunicazione Git
 - Ogni volta che proponi comandi Git per commit/push dopo una modifica, devi includere anche i comandi per eseguire i test/local check pertinenti prima del push.
+
+## Aggiornamento recente
+- Avviata implementazione mobile-friendly: aggiunti breakpoint condivisi (`useViewport`) e shell responsive (`AppFrame` con hamburger/drawer). Prime ottimizzazioni applicate a Lobby, Race, Login e modali principali.

@@ -179,3 +179,4 @@ Per convenzioni estese di backend e frontend:
 - aggiorna qesto file dopo ogni modificaa o aggiunta di codice
 - quando fornisci comandi git per commit/push, includi sempre anche i comandi di test/check locale da eseguire prima del push
 - storico partite e race devono basarsi su sessioni DB (`player_game_sessions`), non su ricariche admin o movimenti esterni
+- aggiornamento mobile: introdotto `useViewport`, `AppFrame` responsive con drawer mobile, Lobby/Race/Login/Modali adattati a layout mobile
