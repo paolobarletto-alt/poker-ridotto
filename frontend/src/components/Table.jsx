@@ -2020,13 +2020,13 @@ export default function PokerTable({
                 ) : (
                   <div style={{
                     display: 'inline-block',
-                    padding: compactMobile ? '3px 9px' : '4px 10px',
+                    padding: isMobile ? '2px 7px' : '4px 10px',
                     background: 'rgba(0,0,0,0.34)',
                     border: '1px solid rgba(212,175,55,0.18)',
                     backdropFilter: 'blur(4px)',
                   }}>
-                    <div style={{ fontSize: 8, letterSpacing: '0.25em', color: 'rgba(245,241,232,0.5)', fontFamily: 'Inter, sans-serif', marginBottom: 2 }}>PIATTO</div>
-                    <div style={{ fontFamily: 'Playfair Display, serif', fontSize: compactMobile ? 20 : 22, color: '#D4AF37', fontWeight: 500, textShadow: '0 1px 8px rgba(0,0,0,0.45)' }}>
+                    <div style={{ fontSize: isMobile ? 7 : 8, letterSpacing: '0.25em', color: 'rgba(245,241,232,0.5)', fontFamily: 'Inter, sans-serif', marginBottom: isMobile ? 1 : 2 }}>PIATTO</div>
+                    <div style={{ fontFamily: 'Playfair Display, serif', fontSize: isMobile ? 17 : 22, color: '#D4AF37', fontWeight: 500, textShadow: '0 1px 8px rgba(0,0,0,0.45)' }}>
                       €{pot.toLocaleString('it-IT')}
                     </div>
                   </div>
