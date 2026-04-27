@@ -56,3 +56,5 @@ cd backend && python poker_engine.py
 - Ritocco ulteriore tavolo mobile: riduzione dimensionale del widget PIATTO (padding + font) su mobile.
 - Feature admin tornei: introdotta visibilità lobby (`is_visible_in_lobby`) per cash/sit&go con toggle in AdminPage, senza eliminare i tavoli/tornei.
 - Backend lobby filtrata per non-admin su tavoli/tornei nascosti; admin dispone di endpoint dedicati per vedere anche chiusi/finiti e gestire show/hide.
+- Correzione visibilità lobby: ora il filtro `is_visible_in_lobby` è applicato a tutti in lobby (anche admin), quindi un tavolo nascosto non appare più in Cash/Sit&Go lobby.
+- Admin tornei cash: aggiunto pulsante "Elimina" vicino a "Mostra/Nascondi" per chiudere rapidamente il tavolo dalla UI admin.

@@ -10,6 +10,9 @@ export const tablesApi = {
   createTable: (data) =>
     api.post('/tables', data),
 
+  deleteTable: (id) =>
+    api.delete(`/tables/${id}`),
+
   listSitGos: () =>
     api.get('/sitgo'),
 

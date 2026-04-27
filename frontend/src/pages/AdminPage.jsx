@@ -544,6 +544,20 @@ function TournamentsTab() {
     }
   };
 
+  const deleteCashTable = async (id, tableName) => {
+    if (!window.confirm(`Eliminare il tavolo "${tableName}"?`)) return;
+    const key = `cash-delete-${id}`;
+    setBusyKey(key);
+    try {
+      await tablesApi.deleteTable(id);
+      setCashTables(prev => prev.filter(t => t.id !== id));
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Errore eliminazione tavolo');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
   const toggleSitGo = async (id, currentVisibility) => {
     const key = `sitgo-${id}`;
     setBusyKey(key);
@@ -607,7 +621,10 @@ function TournamentsTab() {
             )}
             {cashTables.map((t, i) => {
               const key = `cash-${t.id}`;
-              const busy = busyKey === key;
+              const deleteKey = `cash-delete-${t.id}`;
+              const busyToggle = busyKey === key;
+              const busyDelete = busyKey === deleteKey;
+              const busy = busyToggle || busyDelete;
               return (
                 <div key={t.id} style={{
                   padding: isMobile ? '12px 14px' : '13px 16px',
@@ -628,13 +645,19 @@ function TournamentsTab() {
                   <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.55)', fontFamily: 'JetBrains Mono, monospace' }}>
                     {formatDate(t.created_at)}
                   </div>
-                  <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
+                  <div style={{ textAlign: isMobile ? 'left' : 'right', display: 'flex', gap: 8, justifyContent: isMobile ? 'flex-start' : 'flex-end', flexWrap: 'wrap' }}>
                     <SmallButton
                       variant={t.is_visible_in_lobby ? 'ghost' : 'solid'}
                       onClick={() => toggleCash(t.id, t.is_visible_in_lobby)}
                       disabled={busy}
                     >
-                      {busy ? 'Salvataggio…' : t.is_visible_in_lobby ? 'Nascondi' : 'Mostra'}
+                      {busyToggle ? 'Salvataggio…' : t.is_visible_in_lobby ? 'Nascondi' : 'Mostra'}
+                    </SmallButton>
+                    <SmallButton
+                      onClick={() => deleteCashTable(t.id, t.name)}
+                      disabled={busy}
+                    >
+                      {busyDelete ? 'Eliminazione…' : 'Elimina'}
                     </SmallButton>
                   </div>
                 </div>

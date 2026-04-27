@@ -258,15 +258,14 @@ class TableDetail(TableResponse):
 @router.get("/tables", response_model=list[TableResponse])
 async def list_tables(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ):
     stmt = (
         select(PokerTable)
         .where(PokerTable.status != "closed")
+        .where(PokerTable.is_visible_in_lobby.is_(True))
         .order_by(PokerTable.created_at.desc())
     )
-    if not current_user.is_admin:
-        stmt = stmt.where(PokerTable.is_visible_in_lobby.is_(True))
     result = await db.execute(stmt)
     tables = result.scalars().all()
 

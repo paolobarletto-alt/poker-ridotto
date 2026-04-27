@@ -147,15 +147,14 @@ async def _register_player(
 @router.get("", response_model=list[SitGoResponse])
 async def list_sitgo(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ):
     stmt = (
         select(SitGoTournament)
         .where(SitGoTournament.status != "finished")
+        .where(SitGoTournament.is_visible_in_lobby.is_(True))
         .order_by(SitGoTournament.started_at.desc().nullslast(), SitGoTournament.id.desc())
     )
-    if not current_user.is_admin:
-        stmt = stmt.where(SitGoTournament.is_visible_in_lobby.is_(True))
     result = await db.execute(stmt)
     tournaments = result.scalars().all()
     rows = []
