@@ -44,6 +44,15 @@ def _payout_structure_for_players(players: int) -> list[int]:
     return [50, 30, 20]
 
 
+async def _paid_prize_pool(db: AsyncSession, tournament_id: uuid.UUID) -> int:
+    result = await db.execute(
+        select(func.coalesce(func.sum(SitGoRegistration.buy_in_amount), 0)).where(
+            SitGoRegistration.tournament_id == tournament_id
+        )
+    )
+    return int(result.scalar() or 0)
+
+
 async def _build_response(tournament: SitGoTournament, db: AsyncSession) -> dict:
     n_result = await db.execute(
         select(func.count()).select_from(SitGoRegistration).where(
@@ -51,6 +60,7 @@ async def _build_response(tournament: SitGoTournament, db: AsyncSession) -> dict
         )
     )
     n_registered = n_result.scalar() or 0
+    prize_pool = await _paid_prize_pool(db, tournament.id)
     creator_result = await db.execute(select(User.username).where(User.id == tournament.created_by))
     creator_username = creator_result.scalar() or ""
 
@@ -63,7 +73,7 @@ async def _build_response(tournament: SitGoTournament, db: AsyncSession) -> dict
         "speed": tournament.speed,
         "starting_chips": tournament.starting_chips,
         "buy_in": tournament.buy_in,
-        "prize_pool": tournament.prize_pool,
+        "prize_pool": prize_pool,
         "payout_structure": tournament.payout_structure or [],
         "payout_awarded": tournament.payout_awarded,
         "status": tournament.status,
@@ -302,7 +312,7 @@ async def _start_tournament(tournament_id: uuid.UUID):
             first_level = schedule[0]
             first_sb = first_level["small_blind"]
             first_bb = first_level["big_blind"]
-            tournament.prize_pool = 0
+            tournament.prize_pool = await _paid_prize_pool(db, tournament.id)
             tournament.payout_structure = _payout_structure_for_players(len(registrations))
 
             poker_table = PokerTable(
@@ -591,16 +601,18 @@ async def _finish_tournament(
         .with_for_update(of=SitGoRegistration)
     )
     results = results_result.all()
+    prize_pool_paid = await _paid_prize_pool(db, tournament.id)
+    tournament.prize_pool = prize_pool_paid
 
     percentages = tournament.payout_structure or _payout_structure_for_players(len(results))
     payouts: dict[int, int] = {}
     distributed = 0
     for idx, pct in enumerate(percentages, start=1):
-        amount = (tournament.prize_pool * int(pct)) // 100
+        amount = (prize_pool_paid * int(pct)) // 100
         payouts[idx] = amount
         distributed += amount
     if payouts:
-        payouts[1] += tournament.prize_pool - distributed
+        payouts[1] += prize_pool_paid - distributed
 
     for row in results:
         reg = row.SitGoRegistration
