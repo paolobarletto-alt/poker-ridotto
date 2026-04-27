@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<title>Ridotto — Animazioni Tavolo Poker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    background: #0a0a08;
+    color: #c9b685;
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="cards.jsx"></script>
+<script type="text/babel" src="chips.jsx"></script>
+<script type="text/babel" src="table.jsx"></script>
+<script type="text/babel" src="hand-loop.jsx"></script>
+
+<script type="text/babel">
+// Shared shell to look like the existing site chrome in the reference screenshot.
+function SiteChrome({ variantLabel, children }) {
+  return (
+    <div data-screen-label={variantLabel} style={{
+      width: 1040, height: 720,
+      background: '#0a0a08',
+      color: '#c9b685',
+      fontFamily: 'Inter, system-ui, sans-serif',
+      overflow: 'hidden',
+      position: 'relative',
+    }}>
+      {/* Top bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 22px 8px',
+        borderBottom: '1px solid rgba(180, 150, 90, 0.1)',
+      }}>
+        <div>
+          <div style={{ fontSize: 9, letterSpacing: 3, color: '#8a7b5a', textTransform: 'uppercase' }}>Prova</div>
+          <div style={{
+            fontFamily: 'Cormorant Garamond, Georgia, serif',
+            fontSize: 22, fontStyle: 'italic', color: '#e8dfc8', marginTop: 2,
+          }}>
+            No-Limit Hold'em <span style={{ color: '#8a7b5a', fontStyle: 'normal' }}>— €25/50</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 11, letterSpacing: 1.5 }}>
+          <span style={{ color: '#8a7b5a' }}>Seduti <span style={{ color: '#e8dfc8' }}>9/9</span></span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#5ec26a' }}></span>
+            <span style={{
+              padding: '4px 10px', borderRadius: 4,
+              border: '1px solid rgba(180, 150, 90, 0.5)',
+              color: '#e8c87a', fontSize: 10, letterSpacing: 2,
+            }}>ABBANDONA</span>
+          </span>
+        </div>
+      </div>
+      {/* Table area */}
+      <div style={{ padding: '8px 8px 0', position: 'relative' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection id="anims" title="Animazioni tavolo" subtitle="Distribuzione carte + chips bet/win · loop mano intera">
+        <DCArtboard id="classic" label="A · Classico" width={1040} height={720}>
+          <SiteChrome variantLabel="Classico">
+            <PokerTableScene variant="classic" numPlayers={9} />
+          </SiteChrome>
+        </DCArtboard>
+        <DCArtboard id="snappy" label="B · Snappy" width={1040} height={720}>
+          <SiteChrome variantLabel="Snappy">
+            <PokerTableScene variant="snappy" numPlayers={9} />
+          </SiteChrome>
+        </DCArtboard>
+        <DCArtboard id="dramatic" label="C · Dramatic" width={1040} height={720}>
+          <SiteChrome variantLabel="Dramatic">
+            <PokerTableScene variant="dramatic" numPlayers={9} />
+          </SiteChrome>
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="notes" title="Note" subtitle="Decisioni di design">
+        <DCPostIt>
+          <b>Distribuzione</b> — una carta alla volta dal mazzo (in alto a destra), partendo dal giocatore dopo il dealer, due giri.
+        </DCPostIt>
+        <DCPostIt>
+          <b>Chip bet</b> — arco parabolico con rotazione 720°, multipli chip a cascata stagger 25–40ms.
+        </DCPostIt>
+        <DCPostIt>
+          <b>Chip win</b> — intera pila del piatto scivola verso il vincitore (transizione CSS su left/top).
+        </DCPostIt>
+        <DCPostIt>
+          <b>Flip</b> — rotazione Y con cubic-bezier a bounce leggero (.34, 1.56, .64, 1).
+        </DCPostIt>
+        <DCPostIt>
+          <b>Timer turno</b> — ring dorato intorno all'avatar che si scarica in senso antiorario.
+        </DCPostIt>
+        <DCPostIt>
+          <b>Dealer button</b> — la "D" dorata si anima con transition su left/top quando cambia mano.
+        </DCPostIt>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

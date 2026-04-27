@@ -32,7 +32,7 @@ from config import settings
 from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
 from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, PokerTable, SitGoRegistration, SitGoTournament, TableSeat, User
-from poker_engine import AzioneGioco, FaseGioco, StatoSeat
+from poker_engine import AzioneGioco, FaseGioco, StatoSeat, ValutatoreRisultato
 from routers.sitgo_router import (
     _finish_tournament,
     _next_elimination_position,
@@ -503,6 +503,7 @@ def _build_hand_end_payload(game, table_id: str) -> dict:
 
     return {
         "type": "hand_end",
+        "end_reason": "showdown" if _is_showdown_hand(game) else "fold",
         "pot": sum(vincite.values()),
         "winner_name": winner_name,
         "winner_seat": winner_seat,
@@ -515,6 +516,56 @@ def _build_hand_end_payload(game, table_id: str) -> dict:
         "is_split": is_split,
         "split_winners": split_winners,
         "log": game.log[-10:],
+    }
+
+
+def _showdown_player_ids(game) -> list[str]:
+    return [
+        pid for pid in game.ordine
+        if game.seats[pid].stato in (StatoSeat.ATTIVO, StatoSeat.ALL_IN)
+    ]
+
+
+def _is_showdown_hand(game) -> bool:
+    return len(_showdown_player_ids(game)) >= 2
+
+
+def _build_showdown_payload(game, table_id: str) -> Optional[dict]:
+    if not _is_showdown_hand(game):
+        return None
+
+    seat_map = game_manager._seat_map.get(table_id, {})
+    pid_to_seat = {pid: sn for pid, sn in seat_map.items()}
+    vincite = game.vincite_mano
+
+    results = []
+    for pid in _showdown_player_ids(game):
+        seat = game.seats.get(pid)
+        if seat is None:
+            continue
+        seat_number = pid_to_seat.get(pid)
+        if seat_number is None:
+            continue
+
+        hand_description = None
+        if seat.carte and game.board:
+            hand_description = ValutatoreRisultato.valuta(seat.carte + game.board).descrizione
+
+        results.append({
+            "seat": seat_number,
+            "player_id": pid,
+            "username": seat.nome,
+            "cards": [str(card) for card in seat.carte],
+            "hand_description": hand_description,
+            "won": vincite.get(pid, 0) > 0,
+        })
+
+    if not results:
+        return None
+
+    return {
+        "type": "showdown",
+        "results": results,
     }
 
 
@@ -1314,6 +1365,9 @@ async def _handle_leave_seat(
 
     # Se il fold ha concluso la mano, trasmetti hand_end e persisti
     if hand_was_in_progress and game.fase == FaseGioco.FINE_MANO and game.num_mano == hand_num_before:
+        showdown_payload = _build_showdown_payload(game, table_id)
+        if showdown_payload is not None:
+            await game_manager.broadcast(table_id, showdown_payload)
         await game_manager.broadcast(table_id, _build_hand_end_payload(game, table_id))
         async with AsyncSessionLocal() as db:
             tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
@@ -1514,6 +1568,9 @@ async def _post_action_advance(
         vincite = game.vincite_mano
         await game_manager.broadcast_state(table_id)
 
+        showdown_payload = _build_showdown_payload(game, table_id)
+        if showdown_payload is not None:
+            await game_manager.broadcast(table_id, showdown_payload)
         await game_manager.broadcast(table_id, _build_hand_end_payload(game, table_id))
 
         async with AsyncSessionLocal() as db:
@@ -1603,6 +1660,9 @@ async def _run_out_cards(table_id: str, db_table: Any, num_mano: int) -> None:
     if game is None or game.num_mano != num_mano:
         return
 
+    showdown_payload = _build_showdown_payload(game, table_id)
+    if showdown_payload is not None:
+        await game_manager.broadcast(table_id, showdown_payload)
     await game_manager.broadcast(table_id, _build_hand_end_payload(game, table_id))
 
     if db_table is None:
