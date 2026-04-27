@@ -531,12 +531,12 @@ function TournamentsTab() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const toggleCash = async (id, currentVisibility) => {
+  const setCashVisibility = async (id, nextVisibility) => {
     const key = `cash-${id}`;
     setBusyKey(key);
     try {
-      await tablesApi.adminSetCashTableVisibility(id, !currentVisibility);
-      setCashTables(prev => prev.map(t => (t.id === id ? { ...t, is_visible_in_lobby: !currentVisibility } : t)));
+      await tablesApi.adminSetCashTableVisibility(id, nextVisibility);
+      setCashTables(prev => prev.map(t => (t.id === id ? { ...t, is_visible_in_lobby: nextVisibility } : t)));
     } catch (err) {
       setError(err.response?.data?.detail || 'Errore aggiornamento visibilità');
     } finally {
@@ -544,26 +544,12 @@ function TournamentsTab() {
     }
   };
 
-  const deleteCashTable = async (id, tableName) => {
-    if (!window.confirm(`Eliminare il tavolo "${tableName}"?`)) return;
-    const key = `cash-delete-${id}`;
-    setBusyKey(key);
-    try {
-      await tablesApi.deleteTable(id);
-      setCashTables(prev => prev.filter(t => t.id !== id));
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Errore eliminazione tavolo');
-    } finally {
-      setBusyKey('');
-    }
-  };
-
-  const toggleSitGo = async (id, currentVisibility) => {
+  const setSitGoVisibility = async (id, nextVisibility) => {
     const key = `sitgo-${id}`;
     setBusyKey(key);
     try {
-      await tablesApi.adminSetSitGoVisibility(id, !currentVisibility);
-      setSitgos(prev => prev.map(t => (t.id === id ? { ...t, is_visible_in_lobby: !currentVisibility } : t)));
+      await tablesApi.adminSetSitGoVisibility(id, nextVisibility);
+      setSitgos(prev => prev.map(t => (t.id === id ? { ...t, is_visible_in_lobby: nextVisibility } : t)));
     } catch (err) {
       setError(err.response?.data?.detail || 'Errore aggiornamento visibilità');
     } finally {
@@ -579,6 +565,13 @@ function TournamentsTab() {
 
   const visibilityBadge = (visible) =>
     visible ? <Badge color="green">VISIBILE</Badge> : <Badge color="red">NASCOSTO</Badge>;
+
+  const visibleCash = cashTables.filter(t => t.is_visible_in_lobby);
+  const visibleSitgos = sitgos.filter(t => t.is_visible_in_lobby);
+  const eliminatedItems = [
+    ...cashTables.filter(t => !t.is_visible_in_lobby).map(t => ({ ...t, kind: 'cash' })),
+    ...sitgos.filter(t => !t.is_visible_in_lobby).map(t => ({ ...t, kind: 'sitgo' })),
+  ];
 
   return (
     <div style={{ padding: isMobile ? '20px 16px' : '28px 32px' }}>
@@ -612,23 +605,20 @@ function TournamentsTab() {
               color: '#D4AF37',
               fontWeight: 600,
             }}>
-              CASH GAME ({cashTables.length})
+              CASH GAME ({visibleCash.length})
             </div>
-            {cashTables.length === 0 && (
+            {visibleCash.length === 0 && (
               <div style={{ padding: '16px', fontSize: 12, color: 'rgba(245,241,232,0.45)', fontFamily: 'Inter, sans-serif' }}>
                 Nessun tavolo cash disponibile.
               </div>
             )}
-            {cashTables.map((t, i) => {
+            {visibleCash.map((t, i) => {
               const key = `cash-${t.id}`;
-              const deleteKey = `cash-delete-${t.id}`;
-              const busyToggle = busyKey === key;
-              const busyDelete = busyKey === deleteKey;
-              const busy = busyToggle || busyDelete;
+              const busy = busyKey === key;
               return (
                 <div key={t.id} style={{
                   padding: isMobile ? '12px 14px' : '13px 16px',
-                  borderBottom: i < cashTables.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
+                  borderBottom: i < visibleCash.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
                   display: 'grid',
                   gridTemplateColumns: isMobile ? '1fr' : '2.3fr 1.2fr 1fr 1fr 1fr',
                   gap: 10,
@@ -647,17 +637,11 @@ function TournamentsTab() {
                   </div>
                   <div style={{ textAlign: isMobile ? 'left' : 'right', display: 'flex', gap: 8, justifyContent: isMobile ? 'flex-start' : 'flex-end', flexWrap: 'wrap' }}>
                     <SmallButton
-                      variant={t.is_visible_in_lobby ? 'ghost' : 'solid'}
-                      onClick={() => toggleCash(t.id, t.is_visible_in_lobby)}
+                      variant="ghost"
+                      onClick={() => setCashVisibility(t.id, false)}
                       disabled={busy}
                     >
-                      {busyToggle ? 'Salvataggio…' : t.is_visible_in_lobby ? 'Nascondi' : 'Mostra'}
-                    </SmallButton>
-                    <SmallButton
-                      onClick={() => deleteCashTable(t.id, t.name)}
-                      disabled={busy}
-                    >
-                      {busyDelete ? 'Eliminazione…' : 'Elimina'}
+                      {busy ? 'Salvataggio…' : 'Elimina'}
                     </SmallButton>
                   </div>
                 </div>
@@ -675,20 +659,20 @@ function TournamentsTab() {
               color: '#D4AF37',
               fontWeight: 600,
             }}>
-              SIT&GO ({sitgos.length})
+              SIT&GO ({visibleSitgos.length})
             </div>
-            {sitgos.length === 0 && (
+            {visibleSitgos.length === 0 && (
               <div style={{ padding: '16px', fontSize: 12, color: 'rgba(245,241,232,0.45)', fontFamily: 'Inter, sans-serif' }}>
                 Nessun torneo Sit&Go disponibile.
               </div>
             )}
-            {sitgos.map((t, i) => {
+            {visibleSitgos.map((t, i) => {
               const key = `sitgo-${t.id}`;
               const busy = busyKey === key;
               return (
                 <div key={t.id} style={{
                   padding: isMobile ? '12px 14px' : '13px 16px',
-                  borderBottom: i < sitgos.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
+                  borderBottom: i < visibleSitgos.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
                   display: 'grid',
                   gridTemplateColumns: isMobile ? '1fr' : '2.3fr 1fr 1fr 1fr 1fr',
                   gap: 10,
@@ -707,11 +691,68 @@ function TournamentsTab() {
                   </div>
                   <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
                     <SmallButton
-                      variant={t.is_visible_in_lobby ? 'ghost' : 'solid'}
-                      onClick={() => toggleSitGo(t.id, t.is_visible_in_lobby)}
+                      variant="ghost"
+                      onClick={() => setSitGoVisibility(t.id, false)}
                       disabled={busy}
                     >
-                      {busy ? 'Salvataggio…' : t.is_visible_in_lobby ? 'Nascondi' : 'Mostra'}
+                      {busy ? 'Salvataggio…' : 'Elimina'}
+                    </SmallButton>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ border: '1px solid rgba(212,175,55,0.12)' }}>
+            <div style={{
+              padding: isMobile ? '12px 14px' : '12px 16px',
+              borderBottom: '1px solid rgba(212,175,55,0.12)',
+              background: 'rgba(192,57,43,0.08)',
+              fontSize: 10,
+              letterSpacing: '0.2em',
+              color: '#e07070',
+              fontWeight: 600,
+            }}>
+              ELIMINATI ({eliminatedItems.length})
+            </div>
+            {eliminatedItems.length === 0 && (
+              <div style={{ padding: '16px', fontSize: 12, color: 'rgba(245,241,232,0.45)', fontFamily: 'Inter, sans-serif' }}>
+                Nessun tavolo/torneo eliminato.
+              </div>
+            )}
+            {eliminatedItems.map((t, i) => {
+              const key = `${t.kind}-${t.id}`;
+              const busy = busyKey === key;
+              const isCash = t.kind === 'cash';
+              return (
+                <div key={`${t.kind}-${t.id}`} style={{
+                  padding: isMobile ? '12px 14px' : '13px 16px',
+                  borderBottom: i < eliminatedItems.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : '2.3fr 1fr 1fr 1fr 1fr',
+                  gap: 10,
+                  alignItems: 'center',
+                }}>
+                  <div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#F5F1E8', fontWeight: 500 }}>
+                      {t.name}
+                    </div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'rgba(245,241,232,0.5)', marginTop: 2 }}>
+                      {isCash ? 'CASH' : 'SIT&GO'} · ID: {String(t.id).slice(0, 8)}
+                    </div>
+                  </div>
+                  <div>{statusBadge(t.status)}</div>
+                  <div>{visibilityBadge(t.is_visible_in_lobby)}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.55)', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {formatDate(t.finished_at || t.started_at || t.created_at)}
+                  </div>
+                  <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
+                    <SmallButton
+                      variant="solid"
+                      onClick={() => (isCash ? setCashVisibility(t.id, true) : setSitGoVisibility(t.id, true))}
+                      disabled={busy}
+                    >
+                      {busy ? 'Salvataggio…' : 'Ripristina'}
                     </SmallButton>
                   </div>
                 </div>

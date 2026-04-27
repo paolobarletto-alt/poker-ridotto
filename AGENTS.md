@@ -191,4 +191,4 @@ Per convenzioni estese di backend e frontend:
 - tuning finale piatto mobile: ridotto ulteriormente box/testi dell'indicatore PIATTO per minimizzare ingombro sul board
 - admin tornei: aggiunta gestione visibilità lobby per cash e sit&go (show/hide senza eliminazione), inclusa lista completa admin con chiusi/finiti
 - update visibilità lobby: i tavoli/tornei nascosti non compaiono più in lobby anche per admin; restano gestibili solo nella tab Admin Tornei
-- admin tornei cash: aggiunta azione "Elimina" accanto a "Mostra/Nascondi" (usa chiusura tavolo senza cancellazione fisica)
+- admin tornei: "Elimina" ora è soft-delete (`is_visible_in_lobby=false`) per cash e sit&go; aggiunta sezione "Eliminati" con azione "Ripristina"
