@@ -192,7 +192,7 @@ function FlightCard({ flight, cardBack = 'ridotto' }) {
 
 // ── Tournament Panel ─────────────────────────────────────────────────────────
 
-function TournamentPanel({ tournament, blindLevelEndsAt, seats, eliminatedPlayers, myUserId }) {
+function TournamentPanel({ tournament, blindLevelEndsAt, seats, eliminatedPlayers, myUserId, compact = false }) {
   const [collapsed, setCollapsed] = useState(false);
   const [now, setNow] = useState(Date.now());
 
@@ -220,14 +220,14 @@ function TournamentPanel({ tournament, blindLevelEndsAt, seats, eliminatedPlayer
 
   return (
     <div style={{
-      position: 'absolute', top: 16, right: 16, width: 220, zIndex: 20,
+      position: 'absolute', top: compact ? 10 : 16, right: compact ? 10 : 16, width: compact ? 188 : 220, zIndex: 20,
       background: 'rgba(10,10,10,0.92)', border: '1px solid rgba(212,175,55,0.3)',
       backdropFilter: 'blur(8px)',
     }}>
       <div
         onClick={() => setCollapsed(c => !c)}
         style={{
-          padding: '8px 12px', cursor: 'pointer',
+          padding: compact ? '6px 9px' : '8px 12px', cursor: 'pointer',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           borderBottom: collapsed ? 'none' : '1px solid rgba(212,175,55,0.15)',
         }}
@@ -522,6 +522,7 @@ const SUIT_COLORS = { '♠': '#0a0a0a', '♥': '#c0392b', '♦': '#c0392b', '♣
 
 export function Card({ card, size = 'md', cardBack = 'ridotto' }) {
   const sizes = {
+    xs: { w: 30, h: 44, rank: 11, suit: 12 },
     sm: { w: 36, h: 52, rank: 13, suit: 14 },
     md: { w: 50, h: 72, rank: 19, suit: 21 },
     lg: { w: 62, h: 90, rank: 25, suit: 28 },
@@ -674,6 +675,7 @@ function Seat({
   showdownResult,
   showdownReveal,
   seatDelta,
+  compact = false,
   emptyDisabled = false,
   anchorRef,
   cardAnchorRef,
@@ -700,13 +702,13 @@ function Seat({
         role="button" tabIndex={emptyDisabled ? -1 : 0}
         onClick={emptyDisabled ? undefined : onEmptyClick}
         onKeyDown={(e) => !emptyDisabled && e.key === 'Enter' && onEmptyClick()}
-        style={{ position: 'absolute', ...pos, width: 130, transform: 'translate(-50%,-50%)', textAlign: 'center', cursor: emptyDisabled ? 'not-allowed' : 'pointer' }}
+        style={{ position: 'absolute', ...pos, width: compact ? 108 : 130, transform: 'translate(-50%,-50%)', textAlign: 'center', cursor: emptyDisabled ? 'not-allowed' : 'pointer' }}
         title={emptyDisabled ? 'Posto non disponibile per questo tavolo' : `Siediti al posto ${seatIndex + 1}`}
       >
         <div
           style={{
-            width: 72,
-            height: 72,
+            width: compact ? 56 : 72,
+            height: compact ? 56 : 72,
             borderRadius: '50%',
             border: emptyDisabled ? '2px dashed rgba(245,241,232,0.22)' : '2px dashed rgba(212,175,55,0.6)',
             background: emptyDisabled ? 'rgba(245,241,232,0.06)' : 'rgba(212,175,55,0.07)',
@@ -715,7 +717,7 @@ function Seat({
             alignItems: 'center',
             justifyContent: 'center',
             color: emptyDisabled ? 'rgba(245,241,232,0.4)' : 'rgba(212,175,55,0.75)',
-            fontSize: 10,
+            fontSize: compact ? 9 : 10,
             letterSpacing: '0.2em',
             fontFamily: 'Inter, sans-serif',
             transition: 'all 0.2s',
@@ -755,7 +757,7 @@ function Seat({
     <div
       ref={anchorRef}
       style={{
-      position: 'absolute', ...pos, width: 150, transform: 'translate(-50%,-50%)',
+      position: 'absolute', ...pos, width: compact ? 122 : 150, transform: 'translate(-50%,-50%)',
       textAlign: 'center', opacity: isFolded ? 0.34 : isSitOut ? 0.55 : 1,
       filter: seatVisualFilter,
       transition: 'opacity 240ms ease, filter 240ms ease, transform 240ms ease',
@@ -772,7 +774,7 @@ function Seat({
             justifyContent: 'center',
             gap: 2,
             marginBottom: 6,
-            transform: isHero ? 'scale(1.1)' : 'none',
+            transform: isHero ? (compact ? 'scale(0.98)' : 'scale(1.1)') : 'none',
             transformOrigin: 'bottom center',
             opacity: isFolded ? 0.3 : 1,
             transition: 'opacity 240ms ease',
@@ -783,14 +785,14 @@ function Seat({
               {revealCards && showdownReveal?.token ? (
                 <FlipRevealCard
                   card={c}
-                  size={isHero ? 'md' : 'sm'}
+                  size={isHero ? (compact ? 'sm' : 'md') : (compact ? 'xs' : 'sm')}
                   cardBack={cardBack}
                   triggerKey={`${showdownReveal.token}-${i}-${c}`}
                   delayMs={(showdownReveal.delayMs ?? 0) + (i * 120)}
                   durationMs={Math.max(ANIM_TIMINGS.revealMinMs, 600)}
                 />
               ) : (
-                <Card card={c} size={isHero ? 'md' : 'sm'} cardBack={cardBack} />
+                <Card card={c} size={isHero ? (compact ? 'sm' : 'md') : (compact ? 'xs' : 'sm')} cardBack={cardBack} />
               )}
             </div>
           ))}
@@ -820,21 +822,21 @@ function Seat({
           <ActionTimerBar timerSeconds={timerSeconds} actingKey={timerTrigger} />
         )}
 
-        <div style={{ padding: '8px 12px 10px' }}>
+          <div style={{ padding: compact ? '6px 8px 8px' : '8px 12px 10px' }}>
           {/* Nome + badge "TU" */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginBottom: 3 }}>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: isHero ? 13 : 12, fontWeight: isHero ? 600 : 500, color: '#F5F1E8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 96, letterSpacing: isHero ? '-0.01em' : 'normal' }}>
+             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: isHero ? (compact ? 11.5 : 13) : (compact ? 10.5 : 12), fontWeight: isHero ? 600 : 500, color: '#F5F1E8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: compact ? 78 : 96, letterSpacing: isHero ? '-0.01em' : 'normal' }}>
               {seat.username}
             </div>
             {isHero && (
-              <div style={{ fontSize: 8, letterSpacing: '0.15em', color: '#0a0a0a', background: '#D4AF37', padding: '2px 5px', flexShrink: 0, fontWeight: 700, fontFamily: 'Inter, sans-serif' }}>
+               <div style={{ fontSize: compact ? 7 : 8, letterSpacing: '0.15em', color: '#0a0a0a', background: '#D4AF37', padding: compact ? '1px 4px' : '2px 5px', flexShrink: 0, fontWeight: 700, fontFamily: 'Inter, sans-serif' }}>
                 TU
               </div>
             )}
           </div>
 
           {/* Stack */}
-          <div ref={stackAnchorRef} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: isHero ? 13 : 12, fontWeight: isHero ? 600 : 400, color: isHero ? '#D4AF37' : isActing ? '#D4AF37' : 'rgba(245,241,232,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+           <div ref={stackAnchorRef} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: isHero ? (compact ? 11.5 : 13) : (compact ? 10.5 : 12), fontWeight: isHero ? 600 : 400, color: isHero ? '#D4AF37' : isActing ? '#D4AF37' : 'rgba(245,241,232,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
             {seat.stack.toLocaleString('it-IT')}
             {seatDelta != null && seatDelta !== 0 && (
               <span style={{
@@ -1025,7 +1027,7 @@ export default function PokerTable({
   latestEliminated  = null,
 }) {
   // ── Stato locale UI ───────────────────────────────────────────────────────
-  const { isMobile } = useViewport();
+  const { isMobile, width: viewportWidth } = useViewport();
   const [sidebarTab,   setSidebarTab]   = useState('mano');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [chatInput,    setChatInput]    = useState('');
@@ -1782,6 +1784,8 @@ export default function PokerTable({
   const tableName    = tableConfig?.name ?? `Tavolo #${tableId ?? ''}`;
   const seatedCount  = seats.filter(Boolean).length;
   const totalSeats   = tableConfig?.max_seats ?? MAX_SEATS;
+  const compactMobile = isMobile && viewportWidth < 900;
+  const tableStageMaxWidth = compactMobile ? Math.max(520, Math.min(860, viewportWidth - 28)) : 900;
   const mobileSidebarTitle = sidebarTab === 'chat' ? 'Chat' : 'Cronologia';
   const openMobileSidebar = (tab) => {
     setSidebarTab(tab);
@@ -1921,21 +1925,21 @@ export default function PokerTable({
       `}</style>
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderBottom: '1px solid rgba(212,175,55,0.1)', background: 'rgba(0,0,0,0.45)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: compactMobile ? '8px 10px' : '12px 24px', borderBottom: '1px solid rgba(212,175,55,0.1)', background: 'rgba(0,0,0,0.45)', flexShrink: 0 }}>
         <div>
-          <div style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(245,241,232,0.4)', fontFamily: 'Inter, sans-serif' }}>
+          <div style={{ fontSize: compactMobile ? 8 : 9, letterSpacing: '0.22em', color: 'rgba(245,241,232,0.4)', fontFamily: 'Inter, sans-serif' }}>
             {tableName.toUpperCase()}
           </div>
-          <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 17, color: '#F5F1E8', marginTop: 2 }}>
+          <div style={{ fontFamily: 'Playfair Display, serif', fontSize: compactMobile ? 13 : 17, color: '#F5F1E8', marginTop: 2 }}>
             No-Limit Hold'em <span style={{ color: '#D4AF37', fontStyle: 'italic' }}>— {blindsLabel}</span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'rgba(245,241,232,0.6)', fontFamily: 'Inter, sans-serif' }}>
+        <div style={{ display: 'flex', gap: compactMobile ? 8 : 16, alignItems: 'center' }}>
+          <span style={{ fontSize: compactMobile ? 9.5 : 11, color: 'rgba(245,241,232,0.6)', fontFamily: 'Inter, sans-serif' }}>
             <span style={{ color: 'rgba(245,241,232,0.35)' }}>Mano </span>
             <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>#{handNumber.toLocaleString('it-IT')}</span>
           </span>
-          <span style={{ fontSize: 11, color: 'rgba(245,241,232,0.6)', fontFamily: 'Inter, sans-serif' }}>
+          <span style={{ fontSize: compactMobile ? 9.5 : 11, color: 'rgba(245,241,232,0.6)', fontFamily: 'Inter, sans-serif' }}>
             <span style={{ color: 'rgba(245,241,232,0.35)' }}>Seduti </span>
             <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{seatedCount}/{totalSeats}</span>
           </span>
@@ -1943,7 +1947,7 @@ export default function PokerTable({
             title={connected ? 'Connesso' : 'Disconnesso'}
             style={{ width: 8, height: 8, borderRadius: '50%', background: connected ? '#28c840' : '#ff5f57', boxShadow: connected ? '0 0 6px rgba(40,200,64,0.55)' : 'none', transition: 'background 0.4s' }}
           />
-          <GoldButton variant="ghost" size="sm" onClick={onLeave}>Abbandona ↩</GoldButton>
+          <GoldButton variant="ghost" size={compactMobile ? 'sm' : 'sm'} onClick={onLeave} style={compactMobile ? { padding: '6px 10px', fontSize: 10 } : {}}>Abbandona ↩</GoldButton>
         </div>
       </div>
 
@@ -1951,10 +1955,10 @@ export default function PokerTable({
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
 
         {/* ── Area tavolo ───────────────────────────────────────────────── */}
-        <div style={{ flex: 1, position: 'relative', padding: '14px 18px 82px' }}>
+        <div style={{ flex: 1, position: 'relative', padding: compactMobile ? '8px 8px 70px' : '14px 18px 82px' }}>
           <div
             ref={tableStageRef}
-            style={{ position: 'relative', width: '100%', height: '100%', maxWidth: 900, margin: '0 auto' }}
+            style={{ position: 'relative', width: '100%', height: '100%', maxWidth: tableStageMaxWidth, margin: '0 auto' }}
           >
 
             {/* Feltro */}
@@ -2148,6 +2152,7 @@ export default function PokerTable({
                 cardBack={cardBack}
                 showdownResult={showdownResults?.find((r) => r.seat === idx) ?? null}
                 showdownReveal={showdownRevealTokens[idx] ?? null}
+                compact={compactMobile}
                 emptyDisabled={idx >= totalSeats}
                 anchorRef={(node) => setSeatAnchorRef(idx, node)}
                 cardAnchorRef={(node) => setSeatCardAnchorRef(idx, node)}
@@ -2166,6 +2171,7 @@ export default function PokerTable({
                 seats={seats}
                 eliminatedPlayers={eliminatedPlayers}
                 myUserId={user?.id ?? null}
+                compact={compactMobile}
               />
             )}
 
@@ -2174,38 +2180,38 @@ export default function PokerTable({
           </div>
 
           {/* ── Action bar ──────────────────────────────────────────────── */}
-          <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, minWidth: isMobile ? 'min(94vw, 560px)' : 460 }}>
+          <div style={{ position: 'absolute', bottom: compactMobile ? 8 : 12, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, minWidth: isMobile ? 'min(94vw, 560px)' : 460 }}>
 
             {/* Toast errore */}
             {lastError && (
-              <div style={{ width: '100%', marginBottom: 5, background: 'rgba(140,18,18,0.88)', border: '1px solid rgba(200,40,40,0.5)', padding: '6px 14px', fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#ffaaaa', letterSpacing: '0.04em' }}>
+              <div style={{ width: '100%', marginBottom: 5, background: 'rgba(140,18,18,0.88)', border: '1px solid rgba(200,40,40,0.5)', padding: compactMobile ? '4px 10px' : '6px 14px', fontFamily: 'Inter, sans-serif', fontSize: compactMobile ? 10 : 11.5, color: '#ffaaaa', letterSpacing: '0.04em' }}>
                 ⚠ {lastError}
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: isMobile ? 'wrap' : 'nowrap', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', padding: '10px 14px', border: '1px solid rgba(212,175,55,0.18)', backdropFilter: 'blur(12px)' }}>
+            <div style={{ display: 'flex', gap: compactMobile ? 6 : 8, alignItems: 'center', flexWrap: isMobile ? 'wrap' : 'nowrap', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', padding: compactMobile ? '8px 10px' : '10px 14px', border: '1px solid rgba(212,175,55,0.18)', backdropFilter: 'blur(12px)' }}>
               {mySeat !== null ? (
                 <>
                   {/* Fold */}
-                  <ActionBtn disabled={!isMyTurn} variant="ghost" onClick={() => handleAction('fold')}>Fold</ActionBtn>
+                    <ActionBtn compact={compactMobile} disabled={!isMyTurn} variant="ghost" onClick={() => handleAction('fold')}>Fold</ActionBtn>
 
                   {/* Check / Call */}
-                  {canCheck
-                    ? <ActionBtn disabled={!isMyTurn} variant="ghost" onClick={() => handleAction('check')}>Check</ActionBtn>
-                    : <ActionBtn disabled={!isMyTurn} variant="ghost" onClick={() => handleAction('call', callAmount)}>
-                        Call €{callAmount.toLocaleString('it-IT')}
-                      </ActionBtn>
-                  }
+                    {canCheck
+                      ? <ActionBtn compact={compactMobile} disabled={!isMyTurn} variant="ghost" onClick={() => handleAction('check')}>Check</ActionBtn>
+                      : <ActionBtn compact={compactMobile} disabled={!isMyTurn} variant="ghost" onClick={() => handleAction('call', callAmount)}>
+                          Call €{callAmount.toLocaleString('it-IT')}
+                        </ActionBtn>
+                    }
 
                   {/* Raise */}
-                  <ActionBtn disabled={!isMyTurn || clampedRaise >= myStack} onClick={() => handleAction('raise', clampedRaise)}>
-                    Raise €{clampedRaise.toLocaleString('it-IT')}
-                  </ActionBtn>
+                    <ActionBtn compact={compactMobile} disabled={!isMyTurn || clampedRaise >= myStack} onClick={() => handleAction('raise', clampedRaise)}>
+                      Raise €{clampedRaise.toLocaleString('it-IT')}
+                    </ActionBtn>
 
                   {/* All-in */}
-                  <ActionBtn disabled={!isMyTurn} onClick={() => handleAction('allin', myStack)} style={{ background: isMyTurn ? 'rgba(160,24,24,0.75)' : undefined }}>
-                    All-in
-                  </ActionBtn>
+                    <ActionBtn compact={compactMobile} disabled={!isMyTurn} onClick={() => handleAction('allin', myStack)} style={{ background: isMyTurn ? 'rgba(160,24,24,0.75)' : undefined }}>
+                      All-in
+                    </ActionBtn>
 
                   {/* Slider + presets */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginLeft: 6 }}>
@@ -2215,9 +2221,9 @@ export default function PokerTable({
                         value={clampedRaise}
                         onChange={(e) => setRaiseAmt(+e.target.value)}
                         disabled={!isMyTurn}
-                        style={{ width: 95, accentColor: '#D4AF37', opacity: isMyTurn ? 1 : 0.4 }}
+                        style={{ width: compactMobile ? 72 : 95, accentColor: '#D4AF37', opacity: isMyTurn ? 1 : 0.4 }}
                       />
-                      <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#D4AF37', minWidth: 40 }}>
+                      <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: compactMobile ? 9 : 10, color: '#D4AF37', minWidth: compactMobile ? 32 : 40 }}>
                         {clampedRaise.toLocaleString('it-IT')}
                       </span>
                     </div>
@@ -2231,7 +2237,7 @@ export default function PokerTable({
                             background: clampedRaise === value ? 'rgba(212,175,55,0.18)' : 'transparent',
                             border: `1px solid ${clampedRaise === value ? 'rgba(212,175,55,0.55)' : 'rgba(212,175,55,0.2)'}`,
                             color: clampedRaise === value ? '#D4AF37' : 'rgba(245,241,232,0.6)',
-                            padding: '2px 7px', fontSize: 9, fontFamily: 'Inter, sans-serif',
+                            padding: compactMobile ? '2px 5px' : '2px 7px', fontSize: compactMobile ? 8 : 9, fontFamily: 'Inter, sans-serif',
                             cursor: isMyTurn ? 'pointer' : 'default',
                             opacity: isMyTurn ? 1 : 0.38, letterSpacing: '0.06em',
                           }}
@@ -2246,7 +2252,7 @@ export default function PokerTable({
                   <button
                     onClick={() => leaveSeat?.()}
                     title="Lascia il posto"
-                    style={{ background: 'transparent', border: 'none', color: 'rgba(245,241,232,0.28)', fontSize: 10, fontFamily: 'Inter, sans-serif', cursor: 'pointer', marginLeft: 6, padding: '3px 5px', letterSpacing: '0.06em' }}
+                    style={{ background: 'transparent', border: 'none', color: 'rgba(245,241,232,0.28)', fontSize: compactMobile ? 9 : 10, fontFamily: 'Inter, sans-serif', cursor: 'pointer', marginLeft: 6, padding: '3px 5px', letterSpacing: '0.06em' }}
                   >
                     ↑ alzati
                   </button>
@@ -2269,16 +2275,16 @@ export default function PokerTable({
       </div>
 
       {isMobile && (
-        <div style={{ position: 'fixed', top: 64, right: 10, zIndex: 35, display: 'flex', gap: 6 }}>
+        <div style={{ position: 'fixed', top: compactMobile ? 50 : 64, right: compactMobile ? 8 : 10, zIndex: 35, display: 'flex', gap: 6 }}>
           <button
             onClick={() => openMobileSidebar('mano')}
-            style={{ background: 'rgba(0,0,0,0.72)', border: '1px solid rgba(212,175,55,0.32)', color: sidebarTab === 'mano' && mobileSidebarOpen ? '#D4AF37' : 'rgba(245,241,232,0.82)', padding: '7px 10px', fontSize: 10.5, fontFamily: 'Inter, sans-serif', letterSpacing: '0.08em', cursor: 'pointer' }}
+            style={{ background: 'rgba(0,0,0,0.72)', border: '1px solid rgba(212,175,55,0.32)', color: sidebarTab === 'mano' && mobileSidebarOpen ? '#D4AF37' : 'rgba(245,241,232,0.82)', padding: compactMobile ? '6px 8px' : '7px 10px', fontSize: compactMobile ? 9.5 : 10.5, fontFamily: 'Inter, sans-serif', letterSpacing: '0.08em', cursor: 'pointer' }}
           >
             Cronologia
           </button>
           <button
             onClick={() => openMobileSidebar('chat')}
-            style={{ background: 'rgba(0,0,0,0.72)', border: '1px solid rgba(212,175,55,0.32)', color: sidebarTab === 'chat' && mobileSidebarOpen ? '#D4AF37' : 'rgba(245,241,232,0.82)', padding: '7px 10px', fontSize: 10.5, fontFamily: 'Inter, sans-serif', letterSpacing: '0.08em', cursor: 'pointer' }}
+            style={{ background: 'rgba(0,0,0,0.72)', border: '1px solid rgba(212,175,55,0.32)', color: sidebarTab === 'chat' && mobileSidebarOpen ? '#D4AF37' : 'rgba(245,241,232,0.82)', padding: compactMobile ? '6px 8px' : '7px 10px', fontSize: compactMobile ? 9.5 : 10.5, fontFamily: 'Inter, sans-serif', letterSpacing: '0.08em', cursor: 'pointer' }}
           >
             Chat {messages.length > 0 ? `(${messages.length > 9 ? '9+' : messages.length})` : ''}
           </button>
@@ -2289,7 +2295,7 @@ export default function PokerTable({
         <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.72)' }} onClick={closeMobileSidebar}>
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ position: 'absolute', top: 0, right: 0, width: 'min(340px, 92vw)', height: '100%', borderLeft: '1px solid rgba(212,175,55,0.15)', background: 'rgba(6,6,6,0.98)', display: 'flex', flexDirection: 'column' }}
+            style={{ position: 'absolute', top: 0, right: 0, width: compactMobile ? 'min(300px, 94vw)' : 'min(340px, 92vw)', height: '100%', borderLeft: '1px solid rgba(212,175,55,0.15)', background: 'rgba(6,6,6,0.98)', display: 'flex', flexDirection: 'column' }}
           >
             <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(212,175,55,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, letterSpacing: '0.2em', color: '#D4AF37' }}>{mobileSidebarTitle.toUpperCase()}</div>
@@ -2330,19 +2336,19 @@ export default function PokerTable({
               background: 'rgba(0,0,0,0.82)',
               border: '2px solid rgba(100,200,255,0.55)',
               borderRadius: 14,
-              padding: '22px 48px',
+              padding: compactMobile ? '16px 20px' : '22px 48px',
               textAlign: 'center',
               backdropFilter: 'blur(8px)',
               animation: 'fadeInOut 4s forwards',
             }}>
-              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 26, color: '#7EC8E3', fontWeight: 700, letterSpacing: 1 }}>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: compactMobile ? 20 : 26, color: '#7EC8E3', fontWeight: 700, letterSpacing: 1 }}>
                 🤝 PAREGGIO!
               </div>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#aaa', marginTop: 4, marginBottom: 10 }}>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: compactMobile ? 11 : 13, color: '#aaa', marginTop: 4, marginBottom: 10 }}>
                 Piatto diviso — {(handWinner.pot ?? 0).toLocaleString('it-IT')} chips totali
               </div>
               {handWinner.players?.map((p, i) => (
-                <div key={i} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 15, color: '#F5F1E8', marginTop: 4 }}>
+                <div key={i} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: compactMobile ? 12.5 : 15, color: '#F5F1E8', marginTop: 4 }}>
                   <span style={{ color: '#7EC8E3', fontWeight: 600 }}>{p.name}</span>
                   {' '}+{(p.amount ?? 0).toLocaleString('it-IT')} chips
                 </div>
@@ -2354,15 +2360,15 @@ export default function PokerTable({
               background: 'rgba(0,0,0,0.78)',
               border: '1px solid rgba(212,175,55,0.45)',
               borderRadius: 14,
-              padding: '22px 48px',
+              padding: compactMobile ? '16px 20px' : '22px 48px',
               textAlign: 'center',
               backdropFilter: 'blur(8px)',
               animation: 'fadeInOut 4s forwards',
             }}>
-              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: '#D4AF37', fontWeight: 600 }}>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: compactMobile ? 19 : 24, color: '#D4AF37', fontWeight: 600 }}>
                 🏆 {handWinner.name} vince!
               </div>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 16, color: '#F5F1E8', marginTop: 6 }}>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: compactMobile ? 13 : 16, color: '#F5F1E8', marginTop: 6 }}>
                 +{Math.abs(handWinner.amount ?? 0).toLocaleString('it-IT')} chips
               </div>
             </div>
@@ -2382,14 +2388,14 @@ export default function PokerTable({
             background: 'rgba(0,0,0,0.72)',
             border: '1px solid rgba(212,175,55,0.3)',
             borderRadius: 16,
-            padding: '32px 56px',
+            padding: compactMobile ? '18px 28px' : '32px 56px',
             textAlign: 'center',
             backdropFilter: 'blur(6px)',
           }}>
             <div style={{ fontSize: 10, letterSpacing: '0.25em', color: 'rgba(212,175,55,0.6)', fontFamily: 'Inter, sans-serif', marginBottom: 10 }}>
               LA PARTITA INIZIA TRA
             </div>
-            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 72, color: '#D4AF37', lineHeight: 1, fontWeight: 700 }}>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: compactMobile ? 56 : 72, color: '#D4AF37', lineHeight: 1, fontWeight: 700 }}>
               {gameStartingIn}
             </div>
           </div>
@@ -2411,7 +2417,7 @@ export default function PokerTable({
 // ActionBtn — bottone azione con stile coerente + disabled opacità
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ActionBtn({ children, disabled, onClick, variant, style: extraStyle }) {
+function ActionBtn({ children, disabled, onClick, variant, compact = false, style: extraStyle }) {
   const isGhost = variant === 'ghost';
   return (
     <button
@@ -2420,8 +2426,8 @@ function ActionBtn({ children, disabled, onClick, variant, style: extraStyle }) 
         background:   isGhost ? 'transparent' : 'linear-gradient(180deg,#D4AF37 0%,#B8941F 100%)',
         border:       isGhost ? '1px solid rgba(212,175,55,0.4)' : 'none',
         color:        isGhost ? '#D4AF37' : '#0a0a0a',
-        padding:      '7px 14px',
-        fontSize:     11.5,
+        padding:      compact ? '6px 9px' : '7px 14px',
+        fontSize:     compact ? 10 : 11.5,
         fontFamily:   'Inter, sans-serif',
         fontWeight:   isGhost ? 400 : 600,
         letterSpacing:'0.08em',
