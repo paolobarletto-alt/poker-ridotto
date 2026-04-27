@@ -2000,7 +2000,7 @@ export default function PokerTable({
                 ref={potAnchorRef}
                 style={{
                   position: 'absolute',
-                  top: waitingForPlayers != null ? '63%' : (compactMobile ? '29%' : '63%'),
+                  top: waitingForPlayers != null ? '63%' : (isMobile ? '24%' : '63%'),
                   left: '50%',
                   transform: 'translate(-50%,-50%)',
                   textAlign: 'center',
