@@ -9,7 +9,7 @@
  *   mySeat            number | null
  *   connected         bool
  *   reconnecting      bool
- *   showdownResults   array | null  (auto-clear dopo 3s)
+ *   showdownResults   array | null  (auto-clear dopo ~5.5s)
  *   handEndResult     { winner_seat, pot_won, hand_description } | null  (auto-clear dopo 3s)
  *   waitingForPlayers number | null
  *   lastError         string | null  (auto-clear dopo 4s)
@@ -39,7 +39,7 @@ const MAX_SEATS        = 9;
 const RECONNECT_DELAY  = 3000;   // ms tra un tentativo e il successivo
 const MAX_RECONNECTS   = 5;      // oltre questo numero si smette
 const PING_INTERVAL    = 30_000; // ms keepalive
-const SHOWDOWN_TTL     = 3000;   // ms prima di azzerare showdownResults
+const SHOWDOWN_TTL     = 5500;   // ms prima di azzerare showdownResults (carte showdown visibili più a lungo)
 const HAND_END_TTL     = 3000;   // ms prima di azzerare handEndResult
 const ERROR_TTL        = 4000;   // ms prima di azzerare lastError
 const ELIMINATED_TTL   = 3000;   // ms prima di azzerare latestEliminated
