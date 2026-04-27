@@ -4,7 +4,7 @@
  * Route: /table/:id
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { usePokerTable } from '../hooks/usePokerTable';
 import { useTableChat } from '../hooks/useTableChat';
@@ -133,6 +133,7 @@ export default function TablePage() {
   // Leave flow state
   const [leaveStep, setLeaveStep] = useState(null); // null | 'confirm' | 'summary'
   const [sessionPnl, setSessionPnl] = useState(0);
+  const [isPortraitMobile, setIsPortraitMobile] = useState(false);
 
   const {
     tableState,
@@ -193,6 +194,34 @@ export default function TablePage() {
     navigate('/lobby');
   }, [navigate]);
 
+  useEffect(() => {
+    if (!isMobile || typeof window === 'undefined') {
+      setIsPortraitMobile(false);
+      return;
+    }
+    const updateOrientation = () => {
+      setIsPortraitMobile(window.matchMedia('(orientation: portrait)').matches);
+    };
+    updateOrientation();
+    window.addEventListener('resize', updateOrientation);
+    window.addEventListener('orientationchange', updateOrientation);
+    return () => {
+      window.removeEventListener('resize', updateOrientation);
+      window.removeEventListener('orientationchange', updateOrientation);
+    };
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const orientationApi = window.screen?.orientation;
+    if (orientationApi?.lock) {
+      orientationApi.lock('landscape').catch(() => {});
+    }
+    return () => {
+      if (orientationApi?.unlock) orientationApi.unlock();
+    };
+  }, [isMobile]);
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', overflow: isMobile ? 'auto' : 'hidden' }}>
 
@@ -240,6 +269,35 @@ export default function TablePage() {
               TORNA ALLA LOBBY
             </button>
           )}
+        </div>
+      )}
+
+      {isMobile && isPortraitMobile && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1250,
+          background: 'rgba(5,10,7,0.95)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          padding: '24px',
+        }}>
+          <div style={{
+            border: '1px solid rgba(212,175,55,0.32)',
+            background: 'rgba(12,18,14,0.95)',
+            padding: '22px 20px',
+            width: 'min(420px, 92vw)',
+          }}>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 26, color: '#D4AF37', marginBottom: 8 }}>↻</div>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 21, color: '#F5F1E8', marginBottom: 8 }}>
+              Ruota il dispositivo
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(245,241,232,0.55)', letterSpacing: '0.06em', lineHeight: 1.5 }}>
+              Per giocare al tavolo usa la modalita orizzontale.
+            </div>
+          </div>
         </div>
       )}
 

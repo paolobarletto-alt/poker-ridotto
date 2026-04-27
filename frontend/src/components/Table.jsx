@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { GoldButton } from './Shell';
 import BuyinDialog from './BuyinDialog';
 import { useAuth } from '../context/AuthContext';
+import { useViewport } from '../hooks/useViewport';
 
 // ── Keyframes injected once ──────────────────────────────────────────────────
 const _STYLES = `
@@ -1024,7 +1025,9 @@ export default function PokerTable({
   latestEliminated  = null,
 }) {
   // ── Stato locale UI ───────────────────────────────────────────────────────
+  const { isMobile } = useViewport();
   const [sidebarTab,   setSidebarTab]   = useState('mano');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [chatInput,    setChatInput]    = useState('');
   const [showRebuy,    setShowRebuy]    = useState(false);
   const { user } = useAuth();
@@ -1120,6 +1123,10 @@ export default function PokerTable({
   useEffect(() => {
     if (sidebarTab === 'chat') chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, sidebarTab]);
+
+  useEffect(() => {
+    if (!isMobile) setMobileSidebarOpen(false);
+  }, [isMobile]);
 
   // ── Raise presets ─────────────────────────────────────────────────────────
   const potSize = pot + callAmount * 2;
@@ -1775,6 +1782,131 @@ export default function PokerTable({
   const tableName    = tableConfig?.name ?? `Tavolo #${tableId ?? ''}`;
   const seatedCount  = seats.filter(Boolean).length;
   const totalSeats   = tableConfig?.max_seats ?? MAX_SEATS;
+  const mobileSidebarTitle = sidebarTab === 'chat' ? 'Chat' : 'Cronologia';
+  const openMobileSidebar = (tab) => {
+    setSidebarTab(tab);
+    setMobileSidebarOpen(true);
+  };
+  const closeMobileSidebar = () => setMobileSidebarOpen(false);
+
+  const sidebarContent = (
+    <>
+      {/* ── Saldo profilo + ricarica ────────────────────────────────── */}
+      {mySeat !== null && !isTournament && (
+        <RebuyWidget
+          profileBalance={profileBalance}
+          myStack={myStack}
+          showRebuy={showRebuy}
+          setShowRebuy={setShowRebuy}
+          sendRebuy={sendRebuy}
+        />
+      )}
+
+      {/* Tab toggle */}
+      <div style={{ display: 'flex', borderBottom: '1px solid rgba(212,175,55,0.1)', flexShrink: 0 }}>
+        {['mano', 'chat'].map((tab) => {
+          const isActive = sidebarTab === tab;
+          const unread   = tab === 'chat' && !isActive && messages.length > 0;
+          return (
+            <button
+              key={tab}
+              onClick={() => setSidebarTab(tab)}
+              style={{
+                flex: 1, padding: '11px 0', background: 'transparent', border: 'none',
+                borderBottom: isActive ? '2px solid #D4AF37' : '2px solid transparent',
+                color: isActive ? '#D4AF37' : 'rgba(245,241,232,0.38)',
+                fontSize: 9, letterSpacing: '0.22em', fontFamily: 'Inter, sans-serif',
+                fontWeight: isActive ? 600 : 400, cursor: 'pointer',
+                textTransform: 'uppercase', transition: 'color 0.15s',
+              }}
+            >
+              {tab === 'mano' ? 'CRONOLOGIA' : 'CHAT'}
+              {unread && (
+                <span style={{ marginLeft: 5, background: '#D4AF37', color: '#0a0a0a', borderRadius: 8, padding: '1px 5px', fontSize: 7.5, fontWeight: 700 }}>
+                  {messages.length > 9 ? '9+' : messages.length}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Contenuto lista */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 14px', minHeight: 0 }}>
+        {sidebarTab === 'mano' ? (
+          handLog.length === 0
+            ? <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.28)', textAlign: 'center', marginTop: 22, fontStyle: 'italic', fontFamily: 'Playfair Display, serif' }}>In attesa della prossima mano…</div>
+            : handLog.map((entry, i) => (
+                <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid rgba(245,241,232,0.04)', fontSize: 11, color: 'rgba(245,241,232,0.8)', lineHeight: 1.4 }}>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9.5, color: 'rgba(245,241,232,0.32)', marginRight: 6 }}>{entry.t}</span>
+                  {entry.txt}
+                </div>
+              ))
+        ) : (
+          <>
+            {messages.length === 0 && (
+              <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.28)', textAlign: 'center', marginTop: 22, fontStyle: 'italic', fontFamily: 'Playfair Display, serif' }}>Nessun messaggio ancora…</div>
+            )}
+            {messages.map((msg) => (
+              <div key={msg.id} style={{ padding: '5px 0', borderBottom: '1px solid rgba(245,241,232,0.04)', fontSize: 11.5, lineHeight: 1.45 }}>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: 'rgba(245,241,232,0.28)', marginRight: 4 }}>
+                  {msg.ts instanceof Date ? msg.ts.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : ''}
+                </span>
+                <span style={{ color: msg.isMe ? '#D4AF37' : 'rgba(245,241,232,0.52)', fontWeight: msg.isMe ? 600 : 400, fontFamily: 'Inter, sans-serif', marginRight: 4 }}>
+                  {msg.from}:
+                </span>
+                <span style={{ color: msg.isMe ? '#F5F1E8' : 'rgba(245,241,232,0.82)' }}>
+                  {msg.message}
+                </span>
+                {msg._optimistic && (
+                  <span style={{ fontSize: 9, color: 'rgba(245,241,232,0.22)', marginLeft: 4 }}>⋯</span>
+                )}
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </>
+        )}
+      </div>
+
+      {/* Input chat */}
+      {sidebarTab === 'chat' && (
+        <div style={{ padding: '9px 14px', borderTop: '1px solid rgba(212,175,55,0.1)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 5 }}>
+            <input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value.slice(0, 200))}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSendChat(); }}
+              placeholder="Scrivi un messaggio…"
+              maxLength={200}
+              style={{ flex: 1, padding: '7px 9px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(212,175,55,0.17)', color: '#F5F1E8', fontFamily: 'Inter, sans-serif', fontSize: 12, outline: 'none' }}
+            />
+            <button
+              onClick={handleSendChat}
+              disabled={!chatInput.trim()}
+              style={{ background: chatInput.trim() ? 'rgba(212,175,55,0.14)' : 'transparent', border: '1px solid rgba(212,175,55,0.28)', color: chatInput.trim() ? '#D4AF37' : 'rgba(212,175,55,0.28)', padding: '7px 10px', fontSize: 14, cursor: chatInput.trim() ? 'pointer' : 'default', transition: 'all 0.15s' }}
+            >
+              →
+            </button>
+          </div>
+          <div style={{ fontSize: 8.5, color: 'rgba(245,241,232,0.18)', marginTop: 3, textAlign: 'right', fontFamily: 'Inter, sans-serif' }}>
+            {chatInput.length}/200
+          </div>
+        </div>
+      )}
+
+      {/* Footer stato */}
+      <div style={{ padding: '9px 14px', borderTop: '1px solid rgba(212,175,55,0.07)', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 9.5, color: 'rgba(245,241,232,0.4)', fontFamily: 'Inter, sans-serif' }}>
+          Fase: <span style={{ color: '#D4AF37', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{phase}</span>
+        </span>
+        {actingSeat !== null && timerSecs > 0 && (
+          <span style={{ fontSize: 10, color: timerSecs <= 8 ? '#c0392b' : 'rgba(245,241,232,0.4)', fontFamily: 'JetBrains Mono, monospace', transition: 'color 0.3s' }}>
+            {timerSecs}s
+          </span>
+        )}
+      </div>
+    </>
+  );
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -2042,7 +2174,7 @@ export default function PokerTable({
           </div>
 
           {/* ── Action bar ──────────────────────────────────────────────── */}
-          <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, minWidth: 460 }}>
+          <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, minWidth: isMobile ? 'min(94vw, 560px)' : 460 }}>
 
             {/* Toast errore */}
             {lastError && (
@@ -2051,7 +2183,7 @@ export default function PokerTable({
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'rgba(0,0,0,0.75)', padding: '10px 14px', border: '1px solid rgba(212,175,55,0.18)', backdropFilter: 'blur(12px)' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: isMobile ? 'wrap' : 'nowrap', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', padding: '10px 14px', border: '1px solid rgba(212,175,55,0.18)', backdropFilter: 'blur(12px)' }}>
               {mySeat !== null ? (
                 <>
                   {/* Fold */}
@@ -2129,124 +2261,49 @@ export default function PokerTable({
         </div>
 
         {/* ── Sidebar destra ────────────────────────────────────────────── */}
-        <div style={{ width: 262, flexShrink: 0, borderLeft: '1px solid rgba(212,175,55,0.1)', background: 'rgba(0,0,0,0.28)', display: 'flex', flexDirection: 'column' }}>
-
-          {/* ── Saldo profilo + ricarica ────────────────────────────────── */}
-          {mySeat !== null && !isTournament && (
-            <RebuyWidget
-              profileBalance={profileBalance}
-              myStack={myStack}
-              showRebuy={showRebuy}
-              setShowRebuy={setShowRebuy}
-              sendRebuy={sendRebuy}
-            />
-          )}
-
-          {/* Tab toggle */}
-          <div style={{ display: 'flex', borderBottom: '1px solid rgba(212,175,55,0.1)', flexShrink: 0 }}>
-            {['mano', 'chat'].map((tab) => {
-              const isActive = sidebarTab === tab;
-              const unread   = tab === 'chat' && !isActive && messages.length > 0;
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setSidebarTab(tab)}
-                  style={{
-                    flex: 1, padding: '11px 0', background: 'transparent', border: 'none',
-                    borderBottom: isActive ? '2px solid #D4AF37' : '2px solid transparent',
-                    color: isActive ? '#D4AF37' : 'rgba(245,241,232,0.38)',
-                    fontSize: 9, letterSpacing: '0.22em', fontFamily: 'Inter, sans-serif',
-                    fontWeight: isActive ? 600 : 400, cursor: 'pointer',
-                    textTransform: 'uppercase', transition: 'color 0.15s',
-                  }}
-                >
-                  {tab === 'mano' ? 'CRONOLOGIA' : 'CHAT'}
-                  {unread && (
-                    <span style={{ marginLeft: 5, background: '#D4AF37', color: '#0a0a0a', borderRadius: 8, padding: '1px 5px', fontSize: 7.5, fontWeight: 700 }}>
-                      {messages.length > 9 ? '9+' : messages.length}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+        {!isMobile && (
+          <div style={{ width: 262, flexShrink: 0, borderLeft: '1px solid rgba(212,175,55,0.1)', background: 'rgba(0,0,0,0.28)', display: 'flex', flexDirection: 'column' }}>
+            {sidebarContent}
           </div>
+        )}
+      </div>
 
-          {/* Contenuto lista */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 14px', minHeight: 0 }}>
-            {sidebarTab === 'mano' ? (
-              handLog.length === 0
-                ? <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.28)', textAlign: 'center', marginTop: 22, fontStyle: 'italic', fontFamily: 'Playfair Display, serif' }}>In attesa della prossima mano…</div>
-                : handLog.map((entry, i) => (
-                    <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid rgba(245,241,232,0.04)', fontSize: 11, color: 'rgba(245,241,232,0.8)', lineHeight: 1.4 }}>
-                      <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9.5, color: 'rgba(245,241,232,0.32)', marginRight: 6 }}>{entry.t}</span>
-                      {entry.txt}
-                    </div>
-                  ))
-            ) : (
-              <>
-                {messages.length === 0 && (
-                  <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.28)', textAlign: 'center', marginTop: 22, fontStyle: 'italic', fontFamily: 'Playfair Display, serif' }}>Nessun messaggio ancora…</div>
-                )}
-                {messages.map((msg) => (
-                  <div key={msg.id} style={{ padding: '5px 0', borderBottom: '1px solid rgba(245,241,232,0.04)', fontSize: 11.5, lineHeight: 1.45 }}>
-                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: 'rgba(245,241,232,0.28)', marginRight: 4 }}>
-                      {msg.ts instanceof Date ? msg.ts.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : ''}
-                    </span>
-                    <span style={{ color: msg.isMe ? '#D4AF37' : 'rgba(245,241,232,0.52)', fontWeight: msg.isMe ? 600 : 400, fontFamily: 'Inter, sans-serif', marginRight: 4 }}>
-                      {msg.from}:
-                    </span>
-                    <span style={{ color: msg.isMe ? '#F5F1E8' : 'rgba(245,241,232,0.82)' }}>
-                      {msg.message}
-                    </span>
-                    {msg._optimistic && (
-                      <span style={{ fontSize: 9, color: 'rgba(245,241,232,0.22)', marginLeft: 4 }}>⋯</span>
-                    )}
-                  </div>
-                ))}
-                <div ref={chatEndRef} />
-              </>
-            )}
-          </div>
+      {isMobile && (
+        <div style={{ position: 'fixed', top: 64, right: 10, zIndex: 35, display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => openMobileSidebar('mano')}
+            style={{ background: 'rgba(0,0,0,0.72)', border: '1px solid rgba(212,175,55,0.32)', color: sidebarTab === 'mano' && mobileSidebarOpen ? '#D4AF37' : 'rgba(245,241,232,0.82)', padding: '7px 10px', fontSize: 10.5, fontFamily: 'Inter, sans-serif', letterSpacing: '0.08em', cursor: 'pointer' }}
+          >
+            Cronologia
+          </button>
+          <button
+            onClick={() => openMobileSidebar('chat')}
+            style={{ background: 'rgba(0,0,0,0.72)', border: '1px solid rgba(212,175,55,0.32)', color: sidebarTab === 'chat' && mobileSidebarOpen ? '#D4AF37' : 'rgba(245,241,232,0.82)', padding: '7px 10px', fontSize: 10.5, fontFamily: 'Inter, sans-serif', letterSpacing: '0.08em', cursor: 'pointer' }}
+          >
+            Chat {messages.length > 0 ? `(${messages.length > 9 ? '9+' : messages.length})` : ''}
+          </button>
+        </div>
+      )}
 
-          {/* Input chat */}
-          {sidebarTab === 'chat' && (
-            <div style={{ padding: '9px 14px', borderTop: '1px solid rgba(212,175,55,0.1)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', gap: 5 }}>
-                <input
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value.slice(0, 200))}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSendChat(); }}
-                  placeholder="Scrivi un messaggio…"
-                  maxLength={200}
-                  style={{ flex: 1, padding: '7px 9px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(212,175,55,0.17)', color: '#F5F1E8', fontFamily: 'Inter, sans-serif', fontSize: 12, outline: 'none' }}
-                />
-                <button
-                  onClick={handleSendChat}
-                  disabled={!chatInput.trim()}
-                  style={{ background: chatInput.trim() ? 'rgba(212,175,55,0.14)' : 'transparent', border: '1px solid rgba(212,175,55,0.28)', color: chatInput.trim() ? '#D4AF37' : 'rgba(212,175,55,0.28)', padding: '7px 10px', fontSize: 14, cursor: chatInput.trim() ? 'pointer' : 'default', transition: 'all 0.15s' }}
-                >
-                  →
-                </button>
-              </div>
-              <div style={{ fontSize: 8.5, color: 'rgba(245,241,232,0.18)', marginTop: 3, textAlign: 'right', fontFamily: 'Inter, sans-serif' }}>
-                {chatInput.length}/200
-              </div>
+      {isMobile && mobileSidebarOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.72)' }} onClick={closeMobileSidebar}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'absolute', top: 0, right: 0, width: 'min(340px, 92vw)', height: '100%', borderLeft: '1px solid rgba(212,175,55,0.15)', background: 'rgba(6,6,6,0.98)', display: 'flex', flexDirection: 'column' }}
+          >
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(212,175,55,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, letterSpacing: '0.2em', color: '#D4AF37' }}>{mobileSidebarTitle.toUpperCase()}</div>
+              <button
+                onClick={closeMobileSidebar}
+                style={{ background: 'transparent', border: '1px solid rgba(212,175,55,0.28)', color: 'rgba(245,241,232,0.7)', width: 28, height: 28, fontSize: 15, cursor: 'pointer' }}
+              >
+                ✕
+              </button>
             </div>
-          )}
-
-          {/* Footer stato */}
-          <div style={{ padding: '9px 14px', borderTop: '1px solid rgba(212,175,55,0.07)', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 9.5, color: 'rgba(245,241,232,0.4)', fontFamily: 'Inter, sans-serif' }}>
-              Fase: <span style={{ color: '#D4AF37', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{phase}</span>
-            </span>
-            {actingSeat !== null && timerSecs > 0 && (
-              <span style={{ fontSize: 10, color: timerSecs <= 8 ? '#c0392b' : 'rgba(245,241,232,0.4)', fontFamily: 'JetBrains Mono, monospace', transition: 'color 0.3s' }}>
-                {timerSecs}s
-              </span>
-            )}
+            {sidebarContent}
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── BuyinDialog ─────────────────────────────────────────────────── */}
       {!isTournament && showBuyin && selectedSeat !== null && (

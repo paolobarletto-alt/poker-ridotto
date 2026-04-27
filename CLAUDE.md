@@ -49,3 +49,4 @@ cd backend && python poker_engine.py
 
 ## Aggiornamento recente
 - Avviata implementazione mobile-friendly: aggiunti breakpoint condivisi (`useViewport`) e shell responsive (`AppFrame` con hamburger/drawer). Prime ottimizzazioni applicate a Lobby, Race, Login e modali principali.
+- Tavolo mobile rifinito: lock/fallback in orizzontale in `TablePage`; chat e cronologia non sempre visibili, ora apribili on-demand con pannello toggle in `Table`.

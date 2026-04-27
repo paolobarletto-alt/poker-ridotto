@@ -180,3 +180,4 @@ Per convenzioni estese di backend e frontend:
 - quando fornisci comandi git per commit/push, includi sempre anche i comandi di test/check locale da eseguire prima del push
 - storico partite e race devono basarsi su sessioni DB (`player_game_sessions`), non su ricariche admin o movimenti esterni
 - aggiornamento mobile: introdotto `useViewport`, `AppFrame` responsive con drawer mobile, Lobby/Race/Login/Modali adattati a layout mobile
+- aggiornamento tavolo mobile: orientamento landscape richiesto in `TablePage`, chat/cronologia nascoste di default e apribili via toggle in overlay su `Table`
