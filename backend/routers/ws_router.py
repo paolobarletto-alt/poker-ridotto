@@ -1604,7 +1604,7 @@ async def _post_action_advance(
 
         active = game.players_active_count()
         if active >= db_table.min_players:
-            asyncio.create_task(_delayed_start_hand(table_id, db_table, game, delay=5, show_countdown=False))
+            asyncio.create_task(_delayed_start_hand(table_id, db_table, game, delay=3, show_countdown=False))
         else:
             await game_manager.broadcast(table_id, {
                 "type": "waiting_players",
@@ -1706,7 +1706,7 @@ async def _run_out_cards(table_id: str, db_table: Any, num_mano: int) -> None:
         tbl_res = await db.execute(select(PokerTable).where(PokerTable.id == db_table.id))
         db_table_latest = tbl_res.scalar_one_or_none()
     if db_table_latest and active >= db_table_latest.min_players:
-        asyncio.create_task(_delayed_start_hand(table_id, db_table_latest, game, delay=5, show_countdown=False))
+        asyncio.create_task(_delayed_start_hand(table_id, db_table_latest, game, delay=3, show_countdown=False))
     else:
         await game_manager.broadcast(table_id, {
             "type": "waiting_players",
@@ -1798,6 +1798,31 @@ async def _delayed_start_hand(
 
     if db_table.table_type == "sitgo" and game.num_mano == 1:
         await ensure_sitgo_blinds_started(table_id)
+        # Dopo l'avvio del timer del livello 1, sincronizza subito il countdown ai client
+        # per evitare il fallback "timer livello in sincronizzazione…" fino al primo level-up.
+        async with AsyncSessionLocal() as db:
+            t_result = await db.execute(
+                select(SitGoTournament).where(SitGoTournament.table_id == db_table.id)
+            )
+            tournament = t_result.scalar_one_or_none()
+        if tournament:
+            schedule = tournament.blind_schedule or []
+            level = max(int(tournament.current_blind_level or 1), 1)
+            idx = level - 1
+            if idx < len(schedule):
+                level_data = schedule[idx]
+                timing = _sitgo_level_timing_payload(tournament)
+                await game_manager.broadcast(
+                    table_id,
+                    {
+                        "type": "blind_level_up",
+                        "level": level,
+                        "small_blind": level_data["small_blind"],
+                        "big_blind": level_data["big_blind"],
+                        "next_level_in": timing["next_level_in"],
+                        "level_ends_at": timing["level_ends_at"],
+                    },
+                )
 
     logger.info("Nuova mano #%d avviata al tavolo %s", game.num_mano, table_id)
 

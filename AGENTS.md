@@ -192,3 +192,5 @@ Per convenzioni estese di backend e frontend:
 - admin tornei: aggiunta gestione visibilità lobby per cash e sit&go (show/hide senza eliminazione), inclusa lista completa admin con chiusi/finiti
 - update visibilità lobby: i tavoli/tornei nascosti non compaiono più in lobby anche per admin; restano gestibili solo nella tab Admin Tornei
 - admin tornei: "Elimina" ora è soft-delete (`is_visible_in_lobby=false`) per cash e sit&go; aggiunta sezione "Eliminati" con azione "Ripristina"
+- showdown UX: aumentata la permanenza visiva delle hole cards rivelate a fine mano (TTL reveal lato hook frontend)
+- fix timer bui sit&go: sincronizzazione countdown inviata subito all'avvio della prima mano (no fallback permanente "timer in sincronizzazione")

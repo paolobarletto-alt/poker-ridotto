@@ -58,3 +58,5 @@ cd backend && python poker_engine.py
 - Backend lobby filtrata per non-admin su tavoli/tornei nascosti; admin dispone di endpoint dedicati per vedere anche chiusi/finiti e gestire show/hide.
 - Correzione visibilità lobby: ora il filtro `is_visible_in_lobby` è applicato a tutti in lobby (anche admin), quindi un tavolo nascosto non appare più in Cash/Sit&Go lobby.
 - Admin tornei: "Elimina" in UI è soft-delete (imposta `is_visible_in_lobby=false`) per cash e sit&go; introdotta sezione "Eliminati" con ripristino.
+- Showdown: aumentata la durata di visualizzazione delle carte rivelate (TTL `showdownResults` lato frontend).
+- Sit&Go timer fix: aggiunta sincronizzazione immediata del countdown livello al primo hand_start per evitare stato fisso "timer livello in sincronizzazione…".
