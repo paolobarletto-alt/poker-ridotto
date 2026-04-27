@@ -465,6 +465,18 @@ const SEAT_POSITIONS = [
   { left: '80%', top: '82%' },   // 8 – bottom right
 ];
 
+const MOBILE_SEAT_POSITIONS = [
+  { left: '50%', top: '82%' },   // 0 – bottom center
+  { left: '24%', top: '74%' },   // 1 – bottom left
+  { left: '9%',  top: '54%' },   // 2 – left
+  { left: '18%', top: '24%' },   // 3 – top left
+  { left: '36%', top: '12%' },   // 4 – top center-left
+  { left: '64%', top: '12%' },   // 5 – top center-right
+  { left: '82%', top: '24%' },   // 6 – top right
+  { left: '91%', top: '54%' },   // 7 – right
+  { left: '76%', top: '74%' },   // 8 – bottom right
+];
+
 // Offset delle chips rispetto al nameplate (verso il centro del tavolo)
 const BET_OFFSETS = [
   { bottom: '110%', left: '50%', transform: 'translateX(-50%)' },  // 0
@@ -1786,12 +1798,27 @@ export default function PokerTable({
   const totalSeats   = tableConfig?.max_seats ?? MAX_SEATS;
   const compactMobile = isMobile && viewportWidth < 900;
   const tableStageMaxWidth = compactMobile ? Math.max(520, Math.min(860, viewportWidth - 28)) : 900;
+  const seatPositions = compactMobile ? MOBILE_SEAT_POSITIONS : SEAT_POSITIONS;
   const mobileSidebarTitle = sidebarTab === 'chat' ? 'Chat' : 'Cronologia';
   const openMobileSidebar = (tab) => {
     setSidebarTab(tab);
     setMobileSidebarOpen(true);
   };
   const closeMobileSidebar = () => setMobileSidebarOpen(false);
+  const actionBarStyle = isMobile
+    ? {
+        position: 'fixed',
+        bottom: compactMobile ? 'max(4px, env(safe-area-inset-bottom))' : 8,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 36,
+      }
+    : {
+        position: 'absolute',
+        bottom: 12,
+        left: '50%',
+        transform: 'translateX(-50%)',
+      };
 
   const sidebarContent = (
     <>
@@ -2141,7 +2168,7 @@ export default function PokerTable({
                 key={idx}
                 seatIndex={idx}
                 seat={seats[idx]}
-                pos={SEAT_POSITIONS[idx]}
+                pos={seatPositions[idx]}
                 betOffset={BET_OFFSETS[idx]}
                 isHero={mySeat === idx}
                 myCards={mySeat === idx ? myCards : []}
@@ -2180,7 +2207,7 @@ export default function PokerTable({
           </div>
 
           {/* ── Action bar ──────────────────────────────────────────────── */}
-          <div style={{ position: 'absolute', bottom: compactMobile ? 8 : 12, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, minWidth: isMobile ? 'min(94vw, 560px)' : 460 }}>
+          <div style={{ ...actionBarStyle, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, minWidth: isMobile ? 'min(98vw, 560px)' : 460 }}>
 
             {/* Toast errore */}
             {lastError && (
