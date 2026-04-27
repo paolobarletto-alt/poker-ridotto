@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -42,6 +42,23 @@ def _payout_structure_for_players(players: int) -> list[int]:
     if 3 <= players <= 4:
         return [70, 30]
     return [50, 30, 20]
+
+
+def _current_level_duration_seconds(tournament: SitGoTournament) -> int:
+    schedule = tournament.blind_schedule or []
+    level_idx = max(int(tournament.current_blind_level or 1) - 1, 0)
+    if level_idx >= len(schedule):
+        return 0
+    return int(schedule[level_idx].get("duration_seconds", 0) or 0)
+
+
+def _current_level_ends_at(tournament: SitGoTournament) -> datetime | None:
+    if tournament.level_started_at is None:
+        return None
+    duration_seconds = _current_level_duration_seconds(tournament)
+    if duration_seconds <= 0:
+        return None
+    return tournament.level_started_at + timedelta(seconds=duration_seconds)
 
 
 async def _paid_prize_pool(db: AsyncSession, tournament_id: uuid.UUID) -> int:
@@ -373,18 +390,18 @@ async def _blind_level_timer(tournament_id: str, table_id: str):
             tournament = result.scalar_one_or_none()
         if tournament is None or tournament.status != "running":
             break
-        if tournament.level_started_at is None:
+
+        current_level_ends_at = _current_level_ends_at(tournament)
+        if current_level_ends_at is None:
             await asyncio.sleep(1)
             continue
 
-        schedule = tournament.blind_schedule or []
-        current_level_idx = max(tournament.current_blind_level - 1, 0)
-        if current_level_idx >= len(schedule):
-            await asyncio.sleep(30)
-            continue
+        seconds_left = (current_level_ends_at - _now()).total_seconds()
+        if seconds_left > 0:
+            await asyncio.sleep(seconds_left)
 
-        duration = schedule[current_level_idx]["duration_seconds"]
-        await asyncio.sleep(duration)
+        level_up_payload = None
+        wait_before_retry = 0
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(
@@ -394,36 +411,60 @@ async def _blind_level_timer(tournament_id: str, table_id: str):
             if tournament is None or tournament.status != "running":
                 break
 
-            next_level = tournament.current_blind_level + 1
-            if next_level > len(tournament.blind_schedule or []):
-                await asyncio.sleep(30)
+            # Un altro worker potrebbe aver già aggiornato il livello.
+            locked_level_ends_at = _current_level_ends_at(tournament)
+            if locked_level_ends_at is None:
+                await db.rollback()
+                wait_before_retry = 1
+            elif locked_level_ends_at > _now():
+                await db.rollback()
                 continue
 
-            level_data = tournament.blind_schedule[next_level - 1]
-            tournament.current_blind_level = next_level
-            tournament.level_started_at = _now()
+            if wait_before_retry > 0:
+                pass
+            else:
+                next_level = tournament.current_blind_level + 1
+                schedule = tournament.blind_schedule or []
+                if next_level > len(schedule):
+                    await db.rollback()
+                    wait_before_retry = 30
+                else:
+                    level_data = schedule[next_level - 1]
+                    tournament.current_blind_level = next_level
+                    tournament.level_started_at = _now()
 
-            if tournament.table_id:
-                table = await db.get(PokerTable, tournament.table_id)
-                if table:
-                    table.small_blind = level_data["small_blind"]
-                    table.big_blind = level_data["big_blind"]
+                    if tournament.table_id:
+                        table = await db.get(PokerTable, tournament.table_id)
+                        if table:
+                            table.small_blind = level_data["small_blind"]
+                            table.big_blind = level_data["big_blind"]
 
-            await db.commit()
+                    await db.commit()
+                    next_level_ends_at = _current_level_ends_at(tournament)
+                    level_up_payload = {
+                        "type": "blind_level_up",
+                        "level": next_level,
+                        "small_blind": level_data["small_blind"],
+                        "big_blind": level_data["big_blind"],
+                        "next_level_in": level_data["duration_seconds"],
+                        "level_ends_at": next_level_ends_at.isoformat() if next_level_ends_at else None,
+                    }
+
+        if wait_before_retry > 0:
+            await asyncio.sleep(wait_before_retry)
+            continue
+
+        if level_up_payload is None:
+            await asyncio.sleep(30)
+            continue
 
         game = game_manager.get_table(table_id)
         if game:
-            game.min_bet = level_data["big_blind"]
+            game.min_bet = level_up_payload["big_blind"]
 
         await game_manager.broadcast(
             table_id,
-            {
-                "type": "blind_level_up",
-                "level": next_level,
-                "small_blind": level_data["small_blind"],
-                "big_blind": level_data["big_blind"],
-                "next_level_in": level_data["duration_seconds"],
-            },
+            level_up_payload,
         )
 
 

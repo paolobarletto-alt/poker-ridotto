@@ -56,6 +56,12 @@ const INITIAL_TABLE_STATE = {
   hand_number:   0,
 };
 
+const parseServerDate = (value) => {
+  if (!value) return null;
+  const dt = new Date(value);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook
 // ─────────────────────────────────────────────────────────────────────────────
@@ -240,14 +246,6 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           acting_seat:   null,
           timer_seconds: 0,
         }));
-        if (isTournament) {
-          setBlindLevelEndsAt((prev) => {
-            if (prev) return prev;
-            const currentLevel = tournament?.blind_schedule?.[(tournament?.current_blind_level ?? 1) - 1];
-            const durationSeconds = Number(currentLevel?.duration_seconds ?? 0);
-            return durationSeconds > 0 ? new Date(Date.now() + durationSeconds * 1000) : prev;
-          });
-        }
         stopCountdown();
         pushLog(`── Mano #${msg.hand_number ?? ''} ──`);
         break;
@@ -505,9 +503,16 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
             blind_schedule:       tr.blind_schedule ?? [],
             speed:                tr.speed ?? 'normal',
           });
-          if (tr.level_ends_at) {
-            setBlindLevelEndsAt(new Date(tr.level_ends_at));
+          const levelEndsAt = parseServerDate(tr.level_ends_at);
+          if (levelEndsAt) {
+            setBlindLevelEndsAt(levelEndsAt);
+          } else if (Number(tr.next_level_in) > 0) {
+            setBlindLevelEndsAt(new Date(Date.now() + Number(tr.next_level_in) * 1000));
+          } else {
+            setBlindLevelEndsAt(null);
           }
+        } else {
+          setBlindLevelEndsAt(null);
         }
         if (msg.state) applyTableState(msg.state, userId);
         break;
@@ -519,8 +524,13 @@ export function usePokerTable(tableId, { onChatMessage } = {}) {
           ...prev,
           current_blind_level: msg.level ?? prev.current_blind_level,
         } : prev);
-        if (msg.next_level_in > 0) {
-          setBlindLevelEndsAt(new Date(Date.now() + msg.next_level_in * 1000));
+        {
+          const levelEndsAt = parseServerDate(msg.level_ends_at);
+          if (levelEndsAt) {
+            setBlindLevelEndsAt(levelEndsAt);
+          } else if (Number(msg.next_level_in) > 0) {
+            setBlindLevelEndsAt(new Date(Date.now() + Number(msg.next_level_in) * 1000));
+          }
         }
         pushLog(`Livello blind ${msg.level}: ${msg.small_blind}/${msg.big_blind}`);
         break;

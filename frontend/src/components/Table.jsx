@@ -210,6 +210,7 @@ function TournamentPanel({ tournament, blindLevelEndsAt, seats, eliminatedPlayer
   const timeLeftMs = blindLevelEndsAt ? Math.max(0, blindLevelEndsAt - now) : 0;
   const levelDur   = currentLevel?.duration_seconds ?? 0;
   const progress   = levelDur > 0 ? timeLeftMs / (levelDur * 1000) : 0;
+  const progressPct = Math.max(0, Math.min(1, progress));
   const countdownColor = timeLeftMs < 60000 ? '#c0392b' : '#D4AF37';
 
   const activePlayers = seats
@@ -264,11 +265,16 @@ function TournamentPanel({ tournament, blindLevelEndsAt, seats, eliminatedPlayer
                   </div>
                   <div style={{ height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 2 }}>
                     <div style={{
-                      height: '100%', width: `${progress * 100}%`,
+                      height: '100%', width: `${progressPct * 100}%`,
                       background: countdownColor, borderRadius: 2,
                       transition: 'width 1s linear',
                     }} />
                   </div>
+                </div>
+              )}
+              {!blindLevelEndsAt && (
+                <div style={{ marginTop: 8, fontFamily: 'Inter, sans-serif', fontSize: 10, color: 'rgba(245,241,232,0.42)' }}>
+                  timer livello in sincronizzazione…
                 </div>
               )}
             </div>

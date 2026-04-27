@@ -59,6 +59,24 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _sitgo_level_timing_payload(tournament: SitGoTournament) -> dict:
+    schedule = tournament.blind_schedule or []
+    level_idx = max(tournament.current_blind_level - 1, 0)
+    if tournament.level_started_at is None or level_idx >= len(schedule):
+        return {"level_ends_at": None, "next_level_in": None}
+
+    duration = int(schedule[level_idx].get("duration_seconds", 0) or 0)
+    if duration <= 0:
+        return {"level_ends_at": None, "next_level_in": None}
+
+    level_ends_at = tournament.level_started_at + timedelta(seconds=duration)
+    next_level_in = max(0, int((level_ends_at - _now_utc()).total_seconds()))
+    return {
+        "level_ends_at": level_ends_at.isoformat(),
+        "next_level_in": next_level_in,
+    }
+
+
 def _disconnect_task_key(table_id: str, user_id: str) -> str:
     return f"{table_id}:{user_id}"
 
@@ -777,14 +795,8 @@ async def websocket_table(
             )
             tournament = t_result.scalar_one_or_none()
         if tournament:
-            level_ends_at = None
+            timing = _sitgo_level_timing_payload(tournament)
             schedule = tournament.blind_schedule or []
-            level_idx = max(tournament.current_blind_level - 1, 0)
-            if tournament.level_started_at and level_idx < len(schedule):
-                duration = int(schedule[level_idx].get("duration_seconds", 0) or 0)
-                if duration > 0:
-                    level_ends_at = tournament.level_started_at + timedelta(seconds=duration)
-
             tournament_payload = {
                 "id": str(tournament.id),
                 "name": tournament.name,
@@ -792,7 +804,8 @@ async def websocket_table(
                 "speed": tournament.speed,
                 "current_blind_level": tournament.current_blind_level,
                 "blind_schedule": schedule,
-                "level_ends_at": level_ends_at.isoformat() if level_ends_at else None,
+                "level_ends_at": timing["level_ends_at"],
+                "next_level_in": timing["next_level_in"],
             }
 
     # ── 4. Messaggio di benvenuto ──────────────────────────────────────────
