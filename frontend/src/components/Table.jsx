@@ -1996,7 +1996,18 @@ export default function PokerTable({
               </div>
 
               {/* Centro: Piatto o attesa giocatori */}
-              <div ref={potAnchorRef} style={{ position: 'absolute', top: '63%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', minWidth: 130 }}>
+              <div
+                ref={potAnchorRef}
+                style={{
+                  position: 'absolute',
+                  top: waitingForPlayers != null ? '63%' : (compactMobile ? '35%' : '63%'),
+                  left: '50%',
+                  transform: 'translate(-50%,-50%)',
+                  textAlign: 'center',
+                  minWidth: 130,
+                  zIndex: 5,
+                }}
+              >
                 {waitingForPlayers != null ? (
                   <>
                     <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 15, color: 'rgba(245,241,232,0.65)', fontStyle: 'italic', marginBottom: 5 }}>
@@ -2007,12 +2018,18 @@ export default function PokerTable({
                     </div>
                   </>
                 ) : (
-                  <>
-                    <div style={{ fontSize: 8, letterSpacing: '0.25em', color: 'rgba(245,241,232,0.42)', fontFamily: 'Inter, sans-serif', marginBottom: 3 }}>PIATTO</div>
-                    <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#D4AF37', fontWeight: 500 }}>
+                  <div style={{
+                    display: 'inline-block',
+                    padding: compactMobile ? '3px 9px' : '4px 10px',
+                    background: 'rgba(0,0,0,0.34)',
+                    border: '1px solid rgba(212,175,55,0.18)',
+                    backdropFilter: 'blur(4px)',
+                  }}>
+                    <div style={{ fontSize: 8, letterSpacing: '0.25em', color: 'rgba(245,241,232,0.5)', fontFamily: 'Inter, sans-serif', marginBottom: 2 }}>PIATTO</div>
+                    <div style={{ fontFamily: 'Playfair Display, serif', fontSize: compactMobile ? 20 : 22, color: '#D4AF37', fontWeight: 500, textShadow: '0 1px 8px rgba(0,0,0,0.45)' }}>
                       €{pot.toLocaleString('it-IT')}
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
 

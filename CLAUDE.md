@@ -50,3 +50,6 @@ cd backend && python poker_engine.py
 ## Aggiornamento recente
 - Avviata implementazione mobile-friendly: aggiunti breakpoint condivisi (`useViewport`) e shell responsive (`AppFrame` con hamburger/drawer). Prime ottimizzazioni applicate a Lobby, Race, Login e modali principali.
 - Tavolo mobile rifinito: lock/fallback in orizzontale in `TablePage`; chat e cronologia non sempre visibili, ora apribili on-demand con pannello toggle in `Table`.
+- Ulteriore tuning tavolo mobile: scaling/resizing su elementi principali (header, tavolo, seat/cards, action controls, overlay) per migliorare usabilita in landscape.
+- Corretto overlap residuo in mobile landscape: posizioni seat dedicate per viewport stretta e action bar resa fixed bottom per non coprire seat/nameplate.
+- Fix finale mobile: valore piatto spostato/stilizzato per non essere coperto dalle carte; modale buy-in resa piu compatta su mobile (dimensioni/padding/altezze).

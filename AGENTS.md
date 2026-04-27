@@ -181,3 +181,6 @@ Per convenzioni estese di backend e frontend:
 - storico partite e race devono basarsi su sessioni DB (`player_game_sessions`), non su ricariche admin o movimenti esterni
 - aggiornamento mobile: introdotto `useViewport`, `AppFrame` responsive con drawer mobile, Lobby/Race/Login/Modali adattati a layout mobile
 - aggiornamento tavolo mobile: orientamento landscape richiesto in `TablePage`, chat/cronologia nascoste di default e apribili via toggle in overlay su `Table`
+- rifinitura tavolo mobile: resize responsive esteso (header, stage, seat/card, action bar, overlay vittoria/countdown, bottoni) per leggibilita e tap target corretti in landscape
+- fix overlap tavolo mobile: seat ringosizionati su viewport stretta e action bar mobile resa fixed in basso per evitare sovrapposizione con nameplate/cards
+- polish tavolo mobile: importo piatto riallineato e reso sempre leggibile; `BuyinDialog` ridotto e compattato su schermi mobili

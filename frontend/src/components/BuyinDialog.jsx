@@ -41,33 +41,41 @@ export default function BuyinDialog({ isOpen, onClose, seat, tableConfig, userBa
   ];
 
   const handleSlider = (v) => setAmount(Number(v));
+  const panelStyle = {
+    ...S.panel,
+    width: isMobile ? 340 : S.panel.width,
+    maxWidth: isMobile ? '86vw' : S.panel.maxWidth,
+    padding: isMobile ? '20px 16px' : S.panel.padding,
+    maxHeight: isMobile ? '86vh' : undefined,
+    overflowY: isMobile ? 'auto' : 'visible',
+  };
 
   return (
     <div style={S.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={S.panel}>
+      <div style={panelStyle}>
         {/* Close */}
-        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 18, background: 'none', border: 'none', color: 'rgba(245,241,232,0.4)', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        <button onClick={onClose} style={{ position: 'absolute', top: isMobile ? 10 : 16, right: isMobile ? 12 : 18, background: 'none', border: 'none', color: 'rgba(245,241,232,0.4)', fontSize: isMobile ? 16 : 18, cursor: 'pointer' }}>✕</button>
 
         {/* Title */}
         <div style={{ marginBottom: 6 }}>
           <div style={{ fontSize: 9.5, letterSpacing: '0.25em', color: 'rgba(245,241,232,0.45)', fontFamily: 'Inter, sans-serif' }}>
             POSTO {seat != null ? seat + 1 : '—'}
           </div>
-          <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: '#F5F1E8', marginTop: 4 }}>
+          <div style={{ fontFamily: 'Playfair Display, serif', fontSize: isMobile ? 20 : 24, color: '#F5F1E8', marginTop: 4 }}>
             Siediti al tavolo
           </div>
         </div>
 
         {/* Subtitle: table name + blinds */}
         {(tc.name || tc.small_blind) && (
-          <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.5)', fontFamily: 'Inter, sans-serif', marginBottom: 24 }}>
+          <div style={{ fontSize: isMobile ? 10 : 11, color: 'rgba(245,241,232,0.5)', fontFamily: 'Inter, sans-serif', marginBottom: isMobile ? 16 : 24 }}>
             {tc.name && <span>{tc.name}</span>}
             {tc.small_blind && <span style={{ color: 'rgba(212,175,55,0.7)' }}> · €{tc.small_blind}/{tc.big_blind ?? tc.small_blind * 2}</span>}
           </div>
         )}
 
         {/* Balance */}
-        <div style={{ background: 'rgba(212,175,55,0.06)', border: '1px solid rgba(212,175,55,0.15)', padding: '10px 14px', marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ background: 'rgba(212,175,55,0.06)', border: '1px solid rgba(212,175,55,0.15)', padding: isMobile ? '8px 10px' : '10px 14px', marginBottom: isMobile ? 16 : 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 11, color: 'rgba(245,241,232,0.55)', fontFamily: 'Inter, sans-serif' }}>Saldo disponibile</span>
           <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#D4AF37' }}>
             {balance.toLocaleString('it-IT')} chips
@@ -77,7 +85,7 @@ export default function BuyinDialog({ isOpen, onClose, seat, tableConfig, userBa
         {/* Amount display */}
         <div style={{ textAlign: 'center', marginBottom: 16 }}>
           <div style={{ fontSize: 9, letterSpacing: '0.2em', color: 'rgba(245,241,232,0.4)', fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>BUY-IN</div>
-          <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, color: '#D4AF37', fontWeight: 500 }}>
+          <div style={{ fontFamily: 'Playfair Display, serif', fontSize: isMobile ? 27 : 32, color: '#D4AF37', fontWeight: 500 }}>
             {amount.toLocaleString('it-IT')}
           </div>
           <div style={{ fontSize: 9, color: 'rgba(245,241,232,0.35)', fontFamily: 'Inter, sans-serif', marginTop: 2 }}>chips</div>
@@ -94,7 +102,7 @@ export default function BuyinDialog({ isOpen, onClose, seat, tableConfig, userBa
         </div>
 
         {/* Presets */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: isMobile ? 18 : 28 }}>
           {presets.map(({ label, value }) => {
             const active = amount === value;
             return (
