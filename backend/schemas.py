@@ -212,6 +212,7 @@ class SitGoResponse(BaseModel):
     payout_structure: list[int]
     payout_awarded: bool
     status: str
+    is_visible_in_lobby: bool
     blind_schedule: list
     current_blind_level: int
     table_id: Optional[uuid.UUID]

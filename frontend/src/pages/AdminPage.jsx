@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AppFrame, TopBar, GoldButton } from '../components/Shell';
 import api from '../api/client';
+import { tablesApi } from '../api/tables';
 import { useViewport } from '../hooks/useViewport';
 
 // ————— Shared primitives —————
@@ -497,6 +498,209 @@ function UsersTab() {
   );
 }
 
+// ————— Tournaments tab —————
+
+function TournamentsTab() {
+  const { isMobile } = useViewport();
+  const [cashTables, setCashTables] = useState([]);
+  const [sitgos, setSitgos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyKey, setBusyKey] = useState('');
+
+  const formatDate = (iso) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const fetchData = useCallback(async () => {
+    try {
+      setError('');
+      const [cashRes, sitgoRes] = await Promise.all([
+        tablesApi.adminListCashTables(),
+        tablesApi.adminListSitGos(),
+      ]);
+      setCashTables(cashRes.data || []);
+      setSitgos(sitgoRes.data || []);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Errore nel caricamento tornei');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const toggleCash = async (id, currentVisibility) => {
+    const key = `cash-${id}`;
+    setBusyKey(key);
+    try {
+      await tablesApi.adminSetCashTableVisibility(id, !currentVisibility);
+      setCashTables(prev => prev.map(t => (t.id === id ? { ...t, is_visible_in_lobby: !currentVisibility } : t)));
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Errore aggiornamento visibilità');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  const toggleSitGo = async (id, currentVisibility) => {
+    const key = `sitgo-${id}`;
+    setBusyKey(key);
+    try {
+      await tablesApi.adminSetSitGoVisibility(id, !currentVisibility);
+      setSitgos(prev => prev.map(t => (t.id === id ? { ...t, is_visible_in_lobby: !currentVisibility } : t)));
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Errore aggiornamento visibilità');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  const statusBadge = (status) => {
+    if (status === 'running') return <Badge color="green">IN CORSO</Badge>;
+    if (status === 'waiting') return <Badge color="gold">IN ATTESA</Badge>;
+    return <Badge color="muted">CHIUSO</Badge>;
+  };
+
+  const visibilityBadge = (visible) =>
+    visible ? <Badge color="green">VISIBILE</Badge> : <Badge color="red">NASCOSTO</Badge>;
+
+  return (
+    <div style={{ padding: isMobile ? '20px 16px' : '28px 32px' }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 10, letterSpacing: '0.22em', color: '#D4AF37', fontWeight: 600, marginBottom: 4 }}>
+          GESTIONE TORNEI
+        </div>
+        <div style={{ fontFamily: 'Playfair Display, serif', fontSize: isMobile ? 20 : 22, color: '#F5F1E8' }}>
+          Visibilità lobby
+        </div>
+      </div>
+
+      <ErrorLine msg={error} />
+      {error && <div style={{ height: 14 }} />}
+
+      {loading && (
+        <div style={{ color: 'rgba(245,241,232,0.5)', fontFamily: 'Inter, sans-serif', fontSize: 12 }}>
+          Caricamento…
+        </div>
+      )}
+
+      {!loading && (
+        <div style={{ display: 'grid', gap: 20 }}>
+          <div style={{ border: '1px solid rgba(212,175,55,0.12)' }}>
+            <div style={{
+              padding: isMobile ? '12px 14px' : '12px 16px',
+              borderBottom: '1px solid rgba(212,175,55,0.12)',
+              background: 'rgba(212,175,55,0.04)',
+              fontSize: 10,
+              letterSpacing: '0.2em',
+              color: '#D4AF37',
+              fontWeight: 600,
+            }}>
+              CASH GAME ({cashTables.length})
+            </div>
+            {cashTables.length === 0 && (
+              <div style={{ padding: '16px', fontSize: 12, color: 'rgba(245,241,232,0.45)', fontFamily: 'Inter, sans-serif' }}>
+                Nessun tavolo cash disponibile.
+              </div>
+            )}
+            {cashTables.map((t, i) => {
+              const key = `cash-${t.id}`;
+              const busy = busyKey === key;
+              return (
+                <div key={t.id} style={{
+                  padding: isMobile ? '12px 14px' : '13px 16px',
+                  borderBottom: i < cashTables.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : '2.3fr 1.2fr 1fr 1fr 1fr',
+                  gap: 10,
+                  alignItems: 'center',
+                }}>
+                  <div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#F5F1E8', fontWeight: 500 }}>{t.name}</div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'rgba(245,241,232,0.5)', marginTop: 2 }}>
+                      ID: {String(t.id).slice(0, 8)} · {t.small_blind}/{t.big_blind} · max {t.max_seats}
+                    </div>
+                  </div>
+                  <div>{statusBadge(t.status)}</div>
+                  <div>{visibilityBadge(t.is_visible_in_lobby)}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.55)', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {formatDate(t.created_at)}
+                  </div>
+                  <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
+                    <SmallButton
+                      variant={t.is_visible_in_lobby ? 'ghost' : 'solid'}
+                      onClick={() => toggleCash(t.id, t.is_visible_in_lobby)}
+                      disabled={busy}
+                    >
+                      {busy ? 'Salvataggio…' : t.is_visible_in_lobby ? 'Nascondi' : 'Mostra'}
+                    </SmallButton>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ border: '1px solid rgba(212,175,55,0.12)' }}>
+            <div style={{
+              padding: isMobile ? '12px 14px' : '12px 16px',
+              borderBottom: '1px solid rgba(212,175,55,0.12)',
+              background: 'rgba(212,175,55,0.04)',
+              fontSize: 10,
+              letterSpacing: '0.2em',
+              color: '#D4AF37',
+              fontWeight: 600,
+            }}>
+              SIT&GO ({sitgos.length})
+            </div>
+            {sitgos.length === 0 && (
+              <div style={{ padding: '16px', fontSize: 12, color: 'rgba(245,241,232,0.45)', fontFamily: 'Inter, sans-serif' }}>
+                Nessun torneo Sit&Go disponibile.
+              </div>
+            )}
+            {sitgos.map((t, i) => {
+              const key = `sitgo-${t.id}`;
+              const busy = busyKey === key;
+              return (
+                <div key={t.id} style={{
+                  padding: isMobile ? '12px 14px' : '13px 16px',
+                  borderBottom: i < sitgos.length - 1 ? '1px solid rgba(212,175,55,0.06)' : 'none',
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : '2.3fr 1fr 1fr 1fr 1fr',
+                  gap: 10,
+                  alignItems: 'center',
+                }}>
+                  <div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#F5F1E8', fontWeight: 500 }}>{t.name}</div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'rgba(245,241,232,0.5)', marginTop: 2 }}>
+                      ID: {String(t.id).slice(0, 8)} · buy-in {t.buy_in} · max {t.max_seats}
+                    </div>
+                  </div>
+                  <div>{statusBadge(t.status)}</div>
+                  <div>{visibilityBadge(t.is_visible_in_lobby)}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(245,241,232,0.55)', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {formatDate(t.finished_at || t.started_at)}
+                  </div>
+                  <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
+                    <SmallButton
+                      variant={t.is_visible_in_lobby ? 'ghost' : 'solid'}
+                      onClick={() => toggleSitGo(t.id, t.is_visible_in_lobby)}
+                      disabled={busy}
+                    >
+                      {busy ? 'Salvataggio…' : t.is_visible_in_lobby ? 'Nascondi' : 'Mostra'}
+                    </SmallButton>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ————— AdminPage —————
 
 export default function AdminPage() {
@@ -531,7 +735,7 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid rgba(212,175,55,0.1)', background: '#0a0a0a', overflowX: 'auto' }}>
-          {[['invites', '⬡ Inviti'], ['users', '◈ Utenti']].map(([id, label]) => {
+          {[['invites', '⬡ Inviti'], ['users', '◈ Utenti'], ['tables', '⬢ Tornei']].map(([id, label]) => {
             const active = tab === id;
             return (
               <button key={id} onClick={() => setTab(id)} style={{
@@ -551,7 +755,7 @@ export default function AdminPage() {
 
         {/* Content */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {tab === 'invites' ? <InvitesTab /> : <UsersTab />}
+          {tab === 'invites' ? <InvitesTab /> : tab === 'users' ? <UsersTab /> : <TournamentsTab />}
         </div>
       </div>
     </AppFrame>

@@ -7,13 +7,14 @@ from datetime import datetime, timedelta, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
 from config import settings
 from database import get_db
-from models import ChipsLedger, InviteCode, User
+from models import ChipsLedger, InviteCode, PokerTable, SitGoTournament, User
 from schemas import (
     AddChipsPayload,
     InviteCodeCreate,
@@ -48,6 +49,10 @@ def _to_response(invite: InviteCode, include_link: bool = False) -> InviteCodeRe
     if include_link:
         data.invite_link = _invite_link(invite.code)
     return data
+
+
+class VisibilityPayload(BaseModel):
+    is_visible_in_lobby: bool
 
 
 # ————— Invite codes —————
@@ -171,6 +176,114 @@ async def add_chips(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+# ————— Tables visibility management —————
+
+@router.get("/tables/cash")
+async def list_cash_tables_admin(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    result = await db.execute(
+        select(PokerTable)
+        .where(PokerTable.table_type == "cash")
+        .order_by(PokerTable.created_at.desc())
+    )
+    tables = result.scalars().all()
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "status": t.status,
+            "speed": t.speed,
+            "small_blind": t.small_blind,
+            "big_blind": t.big_blind,
+            "max_seats": t.max_seats,
+            "is_visible_in_lobby": t.is_visible_in_lobby,
+            "created_at": t.created_at,
+        }
+        for t in tables
+    ]
+
+
+@router.patch("/tables/cash/{table_id}/visibility")
+async def set_cash_table_visibility(
+    table_id: uuid.UUID,
+    payload: VisibilityPayload,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    result = await db.execute(
+        select(PokerTable).where(
+            PokerTable.id == table_id,
+            PokerTable.table_type == "cash",
+        )
+    )
+    table = result.scalar_one_or_none()
+    if not table:
+        raise HTTPException(status_code=404, detail="Tavolo cash non trovato")
+    table.is_visible_in_lobby = payload.is_visible_in_lobby
+    await db.commit()
+    return {
+        "id": table.id,
+        "is_visible_in_lobby": table.is_visible_in_lobby,
+    }
+
+
+@router.get("/tables/sitgo")
+async def list_sitgo_admin(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    result = await db.execute(
+        select(SitGoTournament)
+        .order_by(SitGoTournament.started_at.desc().nullslast(), SitGoTournament.id.desc())
+    )
+    tournaments = result.scalars().all()
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "status": t.status,
+            "speed": t.speed,
+            "buy_in": t.buy_in,
+            "max_seats": t.max_seats,
+            "table_id": t.table_id,
+            "started_at": t.started_at,
+            "finished_at": t.finished_at,
+            "is_visible_in_lobby": t.is_visible_in_lobby,
+        }
+        for t in tournaments
+    ]
+
+
+@router.patch("/tables/sitgo/{tournament_id}/visibility")
+async def set_sitgo_visibility(
+    tournament_id: uuid.UUID,
+    payload: VisibilityPayload,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    result = await db.execute(
+        select(SitGoTournament).where(SitGoTournament.id == tournament_id)
+    )
+    tournament = result.scalar_one_or_none()
+    if not tournament:
+        raise HTTPException(status_code=404, detail="Torneo Sit&Go non trovato")
+
+    tournament.is_visible_in_lobby = payload.is_visible_in_lobby
+
+    if tournament.table_id:
+        table = await db.get(PokerTable, tournament.table_id)
+        if table is not None:
+            table.is_visible_in_lobby = payload.is_visible_in_lobby
+
+    await db.commit()
+    return {
+        "id": tournament.id,
+        "is_visible_in_lobby": tournament.is_visible_in_lobby,
+    }
 
 
 # ————— Chips management —————

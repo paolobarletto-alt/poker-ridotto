@@ -163,6 +163,7 @@ class PokerTable(Base):
     # "waiting" | "running" | "paused" | "closed"
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="waiting")
     is_private: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_visible_in_lobby: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
@@ -320,6 +321,7 @@ class SitGoTournament(Base):
     speed: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
     # "waiting" | "running" | "finished"
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="waiting")
+    is_visible_in_lobby: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # lista di {level, small_blind, big_blind, duration_seconds}
     # popolata automaticamente in base alla speed al momento della creazione
     blind_schedule: Mapped[list] = mapped_column(JSON, nullable=False, default=list)

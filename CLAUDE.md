@@ -53,3 +53,6 @@ cd backend && python poker_engine.py
 - Ulteriore tuning tavolo mobile: scaling/resizing su elementi principali (header, tavolo, seat/cards, action controls, overlay) per migliorare usabilita in landscape.
 - Corretto overlap residuo in mobile landscape: posizioni seat dedicate per viewport stretta e action bar resa fixed bottom per non coprire seat/nameplate.
 - Fix finale mobile: valore piatto spostato/stilizzato per non essere coperto dalle carte; modale buy-in resa piu compatta su mobile (dimensioni/padding/altezze).
+- Ritocco ulteriore tavolo mobile: riduzione dimensionale del widget PIATTO (padding + font) su mobile.
+- Feature admin tornei: introdotta visibilità lobby (`is_visible_in_lobby`) per cash/sit&go con toggle in AdminPage, senza eliminare i tavoli/tornei.
+- Backend lobby filtrata per non-admin su tavoli/tornei nascosti; admin dispone di endpoint dedicati per vedere anche chiusi/finiti e gestire show/hide.

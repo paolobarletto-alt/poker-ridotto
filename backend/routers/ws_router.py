@@ -228,6 +228,7 @@ class TableResponse(BaseModel):
     max_buyin: Optional[int]
     status: str
     is_private: bool
+    is_visible_in_lobby: bool
     created_by: uuid.UUID
     created_at: datetime
     players_seated: int = 0
@@ -257,13 +258,16 @@ class TableDetail(TableResponse):
 @router.get("/tables", response_model=list[TableResponse])
 async def list_tables(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(
+    stmt = (
         select(PokerTable)
         .where(PokerTable.status != "closed")
         .order_by(PokerTable.created_at.desc())
     )
+    if not current_user.is_admin:
+        stmt = stmt.where(PokerTable.is_visible_in_lobby.is_(True))
+    result = await db.execute(stmt)
     tables = result.scalars().all()
 
     # Conta i posti occupati per ogni tavolo con una query aggregata
@@ -291,6 +295,7 @@ async def list_tables(
             max_buyin=t.max_buyin,
             status=t.status,
             is_private=t.is_private,
+            is_visible_in_lobby=t.is_visible_in_lobby,
             created_by=t.created_by,
             created_at=t.created_at,
             players_seated=seated_map.get(t.id, 0),
@@ -321,6 +326,7 @@ async def create_table(
         max_buyin=body.max_buyin,
         status="waiting",
         is_private=False,
+        is_visible_in_lobby=True,
         created_by=current_user.id,
     )
     db.add(table)
@@ -340,6 +346,7 @@ async def create_table(
         max_buyin=table.max_buyin,
         status=table.status,
         is_private=table.is_private,
+        is_visible_in_lobby=table.is_visible_in_lobby,
         created_by=table.created_by,
         created_at=table.created_at,
         players_seated=0,
@@ -391,6 +398,7 @@ async def get_table(
         max_buyin=table.max_buyin,
         status=table.status,
         is_private=table.is_private,
+        is_visible_in_lobby=table.is_visible_in_lobby,
         created_by=table.created_by,
         created_at=table.created_at,
         players_seated=len(seats_info),

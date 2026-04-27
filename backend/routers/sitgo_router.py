@@ -94,6 +94,7 @@ async def _build_response(tournament: SitGoTournament, db: AsyncSession) -> dict
         "payout_structure": tournament.payout_structure or [],
         "payout_awarded": tournament.payout_awarded,
         "status": tournament.status,
+        "is_visible_in_lobby": tournament.is_visible_in_lobby,
         "blind_schedule": tournament.blind_schedule,
         "current_blind_level": tournament.current_blind_level,
         "table_id": tournament.table_id,
@@ -144,12 +145,18 @@ async def _register_player(
 
 
 @router.get("", response_model=list[SitGoResponse])
-async def list_sitgo(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
+async def list_sitgo(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    stmt = (
         select(SitGoTournament)
         .where(SitGoTournament.status != "finished")
         .order_by(SitGoTournament.started_at.desc().nullslast(), SitGoTournament.id.desc())
     )
+    if not current_user.is_admin:
+        stmt = stmt.where(SitGoTournament.is_visible_in_lobby.is_(True))
+    result = await db.execute(stmt)
     tournaments = result.scalars().all()
     rows = []
     for t in tournaments:
@@ -174,6 +181,7 @@ async def create_sitgo(
         buy_in=payload.buy_in,
         speed=payload.speed,
         status="waiting",
+        is_visible_in_lobby=True,
         blind_schedule=schedule,
         current_blind_level=1,
         payout_structure=payout_structure,
@@ -343,6 +351,7 @@ async def _start_tournament(tournament_id: uuid.UUID):
                 min_buyin=tournament.starting_chips,
                 max_buyin=tournament.starting_chips,
                 status="waiting",
+                is_visible_in_lobby=tournament.is_visible_in_lobby,
                 created_by=tournament.created_by,
             )
             db.add(poker_table)

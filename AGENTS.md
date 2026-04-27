@@ -50,7 +50,7 @@
 |---|---|---|
 | `frontend/src/api/client.js` | ✅ COMPLETO | Non toccare. |
 | `frontend/src/api/auth.js` | ✅ COMPLETO | Non toccare. |
-| `frontend/src/api/tables.js` | ✅ COMPLETO | Include metodi Sit&Go list/create/detail/register/unregister. |
+| `frontend/src/api/tables.js` | ✅ COMPLETO | Include metodi Sit&Go + metodi admin visibilità cash/sit&go. |
 | `frontend/src/context/AuthContext.jsx` | ✅ COMPLETO | Non toccare. |
 | `frontend/src/App.jsx` | ✅ COMPLETO | Non toccare. |
 | `frontend/src/pages/LoginPage.jsx` | ✅ COMPLETO | Non toccare. |
@@ -103,6 +103,10 @@ DELETE /admin/invites/{code}
 GET    /admin/users
 PATCH  /admin/users/{id}/toggle-active
 POST   /admin/users/{id}/add-chips
+GET    /admin/tables/cash
+PATCH  /admin/tables/cash/{id}/visibility
+GET    /admin/tables/sitgo
+PATCH  /admin/tables/sitgo/{id}/visibility
 ```
 
 ### Tavoli
@@ -184,3 +188,5 @@ Per convenzioni estese di backend e frontend:
 - rifinitura tavolo mobile: resize responsive esteso (header, stage, seat/card, action bar, overlay vittoria/countdown, bottoni) per leggibilita e tap target corretti in landscape
 - fix overlap tavolo mobile: seat ringosizionati su viewport stretta e action bar mobile resa fixed in basso per evitare sovrapposizione con nameplate/cards
 - polish tavolo mobile: importo piatto riallineato e reso sempre leggibile; `BuyinDialog` ridotto e compattato su schermi mobili
+- tuning finale piatto mobile: ridotto ulteriormente box/testi dell'indicatore PIATTO per minimizzare ingombro sul board
+- admin tornei: aggiunta gestione visibilità lobby per cash e sit&go (show/hide senza eliminazione), inclusa lista completa admin con chiusi/finiti

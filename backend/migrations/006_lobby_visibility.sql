@@ -1,0 +1,5 @@
+ALTER TABLE poker_tables
+ADD COLUMN IF NOT EXISTS is_visible_in_lobby BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE sitgo_tournaments
+ADD COLUMN IF NOT EXISTS is_visible_in_lobby BOOLEAN NOT NULL DEFAULT TRUE;
