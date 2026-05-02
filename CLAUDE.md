@@ -64,3 +64,4 @@ cd backend && python poker_engine.py
 - Sit&Go blind fix runtime: i level-up ora aggiornano i blind effettivi del motore (small/big blind) e viene sincronizzato il livello attivo prima di ogni nuova mano.
 - Online users fix: endpoint `/users/online` aggiornato per unire presence HTTP e connessioni websocket tavolo, includendo anche i giocatori seduti/attivi in partita.
 - Test split-pot: introdotto `backend/test_split_pot.py` per verificare pareggio showdown e corretta divisione del piatto, inclusa gestione del resto chip su piatto dispari.
+- Raise slider UX: in `Table` aggiunti controlli `-`/`+` adiacenti alla barra raise con step di 1 big blind e limiti coerenti a min-raise e stack disponibile.

@@ -1106,6 +1106,7 @@ export default function PokerTable({
   const canCheck   = callAmount === 0;
   const myStack    = mySeatData?.stack ?? 0;
   const bigBlind   = tableConfig?.big_blind ?? 10;
+  const raiseStep  = Math.max(1, Number(bigBlind) || 1);
   const minRaise   = Math.max(callAmount + bigBlind, bigBlind);
 
   // ── Reset raise amount al proprio turno ───────────────────────────────────
@@ -1155,6 +1156,15 @@ export default function PokerTable({
   const handleAction = useCallback((action, amount = 0) => {
     sendAction?.(action, amount);
   }, [sendAction]);
+
+  const adjustRaiseByBlind = useCallback((direction) => {
+    if (!isMyTurn) return;
+    setRaiseAmt((prev) => {
+      const current = Number.isFinite(prev) ? prev : minRaise;
+      const next = current + (direction * raiseStep);
+      return Math.max(minRaise, Math.min(next, myStack));
+    });
+  }, [isMyTurn, minRaise, myStack, raiseStep]);
 
   const handleSendChat = useCallback(() => {
     const txt = chatInput.trim();
@@ -2258,18 +2268,59 @@ export default function PokerTable({
                     </ActionBtn>
 
                   {/* Slider + presets */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginLeft: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <input
-                        type="range" min={minRaise} max={myStack > minRaise ? myStack : minRaise + 1}
-                        value={clampedRaise}
-                        onChange={(e) => setRaiseAmt(+e.target.value)}
-                        disabled={!isMyTurn}
-                        style={{ width: compactMobile ? 72 : 95, accentColor: '#D4AF37', opacity: isMyTurn ? 1 : 0.4 }}
-                      />
-                      <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: compactMobile ? 9 : 10, color: '#D4AF37', minWidth: compactMobile ? 32 : 40 }}>
-                        {clampedRaise.toLocaleString('it-IT')}
-                      </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginLeft: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                          onClick={() => adjustRaiseByBlind(-1)}
+                          disabled={!isMyTurn || clampedRaise <= minRaise}
+                          title={`Diminuisci di 1 BB (${raiseStep})`}
+                          style={{
+                            width: compactMobile ? 20 : 22,
+                            height: compactMobile ? 20 : 22,
+                            border: '1px solid rgba(212,175,55,0.38)',
+                            background: 'rgba(212,175,55,0.08)',
+                            color: '#D4AF37',
+                            fontSize: compactMobile ? 12 : 13,
+                            fontFamily: 'Inter, sans-serif',
+                            cursor: isMyTurn ? 'pointer' : 'default',
+                            opacity: isMyTurn && clampedRaise > minRaise ? 1 : 0.38,
+                            lineHeight: 1,
+                            padding: 0,
+                          }}
+                        >
+                          −
+                        </button>
+                        <input
+                          type="range" min={minRaise} max={myStack > minRaise ? myStack : minRaise + 1}
+                          step={raiseStep}
+                          value={clampedRaise}
+                          onChange={(e) => setRaiseAmt(+e.target.value)}
+                          disabled={!isMyTurn}
+                          style={{ width: compactMobile ? 72 : 95, accentColor: '#D4AF37', opacity: isMyTurn ? 1 : 0.4 }}
+                        />
+                        <button
+                          onClick={() => adjustRaiseByBlind(1)}
+                          disabled={!isMyTurn || clampedRaise >= myStack}
+                          title={`Aumenta di 1 BB (${raiseStep})`}
+                          style={{
+                            width: compactMobile ? 20 : 22,
+                            height: compactMobile ? 20 : 22,
+                            border: '1px solid rgba(212,175,55,0.38)',
+                            background: 'rgba(212,175,55,0.08)',
+                            color: '#D4AF37',
+                            fontSize: compactMobile ? 12 : 13,
+                            fontFamily: 'Inter, sans-serif',
+                            cursor: isMyTurn ? 'pointer' : 'default',
+                            opacity: isMyTurn && clampedRaise < myStack ? 1 : 0.38,
+                            lineHeight: 1,
+                            padding: 0,
+                          }}
+                        >
+                          +
+                        </button>
+                        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: compactMobile ? 9 : 10, color: '#D4AF37', minWidth: compactMobile ? 32 : 40 }}>
+                          {clampedRaise.toLocaleString('it-IT')}
+                        </span>
                     </div>
                     <div style={{ display: 'flex', gap: 3 }}>
                       {presets.map(({ label, value }) => (

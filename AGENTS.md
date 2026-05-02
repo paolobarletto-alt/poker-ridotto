@@ -198,3 +198,4 @@ Per convenzioni estese di backend e frontend:
 - fix bui sit&go runtime: il level-up aggiorna i blind reali del motore (non solo UI) e viene forzata sync blind pre-mano per applicare correttamente i livelli successivi
 - online users fix: `/users/online` ora include sia presenza HTTP recente sia utenti connessi via websocket ai tavoli, cosi i giocatori seduti risultano online anche durante la partita
 - test split-pot: aggiunto `backend/test_split_pot.py` con casi di pareggio showdown e divisione piatto (incluso chip dispari assegnato al primo vincitore secondo ordine corrente)
+- action bar raise UX: aggiunti pulsanti `-` e `+` vicino allo slider puntata per variare l'importo di 1 big blind (con clamp min/max stack) su tutti i tavoli
