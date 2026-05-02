@@ -194,3 +194,4 @@ Per convenzioni estese di backend e frontend:
 - admin tornei: "Elimina" ora è soft-delete (`is_visible_in_lobby=false`) per cash e sit&go; aggiunta sezione "Eliminati" con azione "Ripristina"
 - showdown UX: aumentata la permanenza visiva delle hole cards rivelate a fine mano (TTL reveal lato hook frontend)
 - fix timer bui sit&go: sincronizzazione countdown inviata subito all'avvio della prima mano (no fallback permanente "timer in sincronizzazione")
+- fix cash seat-in mid-hand: ora il join su posto libero durante mano in corso registra il player come `SEDUTO_OUT` e lo include automaticamente dalla mano successiva, con sync DB->engine prima di ogni start hand

@@ -32,7 +32,7 @@ from config import settings
 from database import AsyncSessionLocal, get_db
 from game_manager import game_manager
 from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, PokerTable, SitGoRegistration, SitGoTournament, TableSeat, User
-from poker_engine import AzioneGioco, FaseGioco, StatoSeat, ValutatoreRisultato
+from poker_engine import AzioneGioco, FaseGioco, Seat, StatoSeat, ValutatoreRisultato
 from routers.sitgo_router import (
     _finish_tournament,
     _next_elimination_position,
@@ -104,6 +104,60 @@ async def _get_open_session(
         .limit(1)
     )
     return result.scalar_one_or_none()
+
+
+def _add_cash_player_to_engine(
+    game: Any,
+    user_id: str,
+    display: str,
+    stack: int,
+) -> tuple[bool, Optional[str]]:
+    if user_id in game.seats:
+        return False, "Giocatore già presente nel tavolo di gioco"
+
+    if game.hand_in_progress():
+        game.seats[user_id] = Seat(
+            player_id=user_id,
+            nome=display,
+            stack=stack,
+            stato=StatoSeat.SEDUTO_OUT,
+        )
+        game.ordine.append(user_id)
+        return True, None
+
+    if not game.aggiungi_giocatore(user_id, display, stack):
+        return False, "Impossibile aggiungere il giocatore al tavolo in questo momento"
+
+    return True, None
+
+
+async def _sync_cash_engine_from_db(table_id: str, db_table: PokerTable, game: Any) -> None:
+    if db_table.table_type != "cash":
+        return
+
+    async with AsyncSessionLocal() as db:
+        seats_result = await db.execute(
+            select(TableSeat, User)
+            .join(User, TableSeat.user_id == User.id)
+            .where(TableSeat.table_id == db_table.id)
+        )
+        db_seats = seats_result.all()
+
+    for db_seat, seat_user in db_seats:
+        uid = str(seat_user.id)
+        display = seat_user.display_name or seat_user.username
+
+        if game_manager.seat_for_user(table_id, uid) is None:
+            game_manager.register_seat(table_id, uid, db_seat.seat_number)
+
+        if uid in game.seats:
+            continue
+
+        added, reason = _add_cash_player_to_engine(game, uid, display, int(db_seat.stack))
+        if not added:
+            raise RuntimeError(
+                f"Sync seat cash fallita per utente {uid} tavolo {table_id}: {reason or 'errore sconosciuto'}"
+            )
 
 
 async def _enforce_sitgo_disconnect_timeout(table_id: str, user_id: str) -> None:
@@ -779,6 +833,8 @@ async def websocket_table(
         if db_seats:
             logger.info("Stato tavolo %s ricostruito dal DB (%d giocatori)", table_id, len(db_seats))
 
+    await _sync_cash_engine_from_db(table_id, db_table, game)
+
     game_manager.add_connection(table_id, user_id, websocket)
     if game_manager.is_seated(table_id, user_id):
         async with AsyncSessionLocal() as db:
@@ -1137,6 +1193,9 @@ async def _handle_join_seat(
         await ws.send_json({"type": "error", "message": f"Il posto {seat_number} è già occupato"})
         return
 
+    hand_in_progress = game.hand_in_progress()
+    seat_status = "sit_out" if hand_in_progress else "active"
+
     # Crea TableSeat nel DB e scala le chips
     async with AsyncSessionLocal() as db:
         # Verifica doppio nel DB (race condition)
@@ -1159,7 +1218,7 @@ async def _handle_join_seat(
             user_id=user.id,
             seat_number=seat_number,
             stack=buyin,
-            status="active",
+            status=seat_status,
         )
         db.add(db_seat)
         db.add(PlayerGameSession(
@@ -1187,7 +1246,49 @@ async def _handle_join_seat(
 
     # Registra nell'engine e nella seat map
     display = user.display_name or user.username
-    game.aggiungi_giocatore(user_id, display, buyin)
+    added_to_engine, add_error = _add_cash_player_to_engine(game, user_id, display, buyin)
+    if not added_to_engine:
+        async with AsyncSessionLocal() as db:
+            seat_res = await db.execute(
+                select(TableSeat).where(
+                    TableSeat.table_id == db_table.id,
+                    TableSeat.user_id == user.id,
+                )
+            )
+            failed_seat = seat_res.scalar_one_or_none()
+            if failed_seat:
+                await db.delete(failed_seat)
+
+            open_session = await _get_open_session(db, db_table.id, user.id)
+            if open_session:
+                open_session.current_stack = 0
+                open_session.cashout = buyin
+                open_session.result_chips = 0
+                open_session.ended_at = _now_utc()
+                open_session.last_activity_at = _now_utc()
+                open_session.status = "closed"
+                open_session.close_reason = "seat_join_failed"
+
+            user_db_res = await db.execute(select(User).where(User.id == user.id))
+            user_db = user_db_res.scalar_one_or_none()
+            if user_db is not None:
+                user_db.chips_balance += buyin
+                db.add(ChipsLedger(
+                    user_id=user.id,
+                    amount=buyin,
+                    balance_after=user_db.chips_balance,
+                    reason="table_cashout",
+                    description=f"Rimborso buy-in per errore seat-in al tavolo '{db_table.name}'",
+                ))
+
+            await db.commit()
+
+        await ws.send_json({
+            "type": "error",
+            "message": add_error or "Impossibile sederti al tavolo in questo momento",
+        })
+        return
+
     game_manager.register_seat(table_id, user_id, seat_number)
 
     logger.info("Giocatore %s si è seduto al posto %d (buy-in %d)", user.username, seat_number, buyin)
@@ -1775,6 +1876,16 @@ async def _delayed_start_hand(
 
     if game.hand_in_progress():
         return  # nel frattempo qualcuno ha già avviato una mano
+
+    try:
+        await _sync_cash_engine_from_db(table_id, db_table, game)
+    except Exception:
+        logger.exception("Sync DB->engine fallita prima dell'avvio mano per tavolo %s", table_id)
+        await game_manager.broadcast(
+            table_id,
+            {"type": "error", "message": "Errore interno durante la sincronizzazione del tavolo"},
+        )
+        return
 
     active = game.players_active_count()
     if active < db_table.min_players:
