@@ -148,6 +148,12 @@ class GameManager:
         connected = set(self._connections.get(table_id, {}).keys())
         return len(connected - seated)
 
+    def get_connected_user_ids(self) -> set[str]:
+        connected: set[str] = set()
+        for table_conns in self._connections.values():
+            connected.update(table_conns.keys())
+        return connected
+
     # ── Broadcast / send ────────────────────────────────────────────────────
 
     async def broadcast(self, table_id: str, message: dict):

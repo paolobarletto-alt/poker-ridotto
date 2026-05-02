@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
 from database import get_db
+from game_manager import game_manager
 from models import ChipsLedger, GameHand, HandAction, PlayerGameSession, TableSeat, User
 from schemas import UserPublic, UserResponse
 from datetime import datetime, timedelta, timezone
@@ -28,7 +29,17 @@ async def online_users(
     db: AsyncSession = Depends(get_db),
 ):
     from presence import get_online_ids
-    ids = [uuid.UUID(i) for i in get_online_ids()]
+
+    merged_ids = set(get_online_ids())
+    merged_ids.update(game_manager.get_connected_user_ids())
+
+    ids: list[uuid.UUID] = []
+    for user_id in merged_ids:
+        try:
+            ids.append(uuid.UUID(user_id))
+        except ValueError:
+            continue
+
     if not ids:
         return []
     result = await db.execute(

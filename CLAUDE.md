@@ -62,3 +62,5 @@ cd backend && python poker_engine.py
 - Sit&Go timer fix: aggiunta sincronizzazione immediata del countdown livello al primo hand_start per evitare stato fisso "timer livello in sincronizzazione…".
 - Cash game fix seat-in: ingresso a mano in corso consentito su posti liberi con stato `SEDUTO_OUT` fino alla mano successiva; aggiunta sincronizzazione DB->engine pre `inizia_mano` per evitare drift tra TableSeat e motore.
 - Sit&Go blind fix runtime: i level-up ora aggiornano i blind effettivi del motore (small/big blind) e viene sincronizzato il livello attivo prima di ogni nuova mano.
+- Online users fix: endpoint `/users/online` aggiornato per unire presence HTTP e connessioni websocket tavolo, includendo anche i giocatori seduti/attivi in partita.
+- Test split-pot: introdotto `backend/test_split_pot.py` per verificare pareggio showdown e corretta divisione del piatto, inclusa gestione del resto chip su piatto dispari.

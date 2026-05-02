@@ -196,3 +196,5 @@ Per convenzioni estese di backend e frontend:
 - fix timer bui sit&go: sincronizzazione countdown inviata subito all'avvio della prima mano (no fallback permanente "timer in sincronizzazione")
 - fix cash seat-in mid-hand: ora il join su posto libero durante mano in corso registra il player come `SEDUTO_OUT` e lo include automaticamente dalla mano successiva, con sync DB->engine prima di ogni start hand
 - fix bui sit&go runtime: il level-up aggiorna i blind reali del motore (non solo UI) e viene forzata sync blind pre-mano per applicare correttamente i livelli successivi
+- online users fix: `/users/online` ora include sia presenza HTTP recente sia utenti connessi via websocket ai tavoli, cosi i giocatori seduti risultano online anche durante la partita
+- test split-pot: aggiunto `backend/test_split_pot.py` con casi di pareggio showdown e divisione piatto (incluso chip dispari assegnato al primo vincitore secondo ordine corrente)
