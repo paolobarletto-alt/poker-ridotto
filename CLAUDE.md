@@ -61,3 +61,4 @@ cd backend && python poker_engine.py
 - Showdown: aumentata la durata di visualizzazione delle carte rivelate (TTL `showdownResults` lato frontend).
 - Sit&Go timer fix: aggiunta sincronizzazione immediata del countdown livello al primo hand_start per evitare stato fisso "timer livello in sincronizzazione…".
 - Cash game fix seat-in: ingresso a mano in corso consentito su posti liberi con stato `SEDUTO_OUT` fino alla mano successiva; aggiunta sincronizzazione DB->engine pre `inizia_mano` per evitare drift tra TableSeat e motore.
+- Sit&Go blind fix runtime: i level-up ora aggiornano i blind effettivi del motore (small/big blind) e viene sincronizzato il livello attivo prima di ogni nuova mano.

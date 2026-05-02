@@ -160,6 +160,32 @@ async def _sync_cash_engine_from_db(table_id: str, db_table: PokerTable, game: A
             )
 
 
+async def _sync_sitgo_blinds_for_next_hand(table_id: str, db_table: PokerTable, game: Any) -> None:
+    if db_table.table_type != "sitgo":
+        return
+
+    target_sb = int(db_table.small_blind)
+    target_bb = int(db_table.big_blind)
+
+    async with AsyncSessionLocal() as db:
+        t_result = await db.execute(
+            select(SitGoTournament).where(SitGoTournament.table_id == db_table.id)
+        )
+        tournament = t_result.scalar_one_or_none()
+
+    if tournament is not None:
+        schedule = tournament.blind_schedule or []
+        level = max(int(tournament.current_blind_level or 1), 1)
+        idx = level - 1
+        if idx < len(schedule):
+            level_data = schedule[idx]
+            target_sb = int(level_data["small_blind"])
+            target_bb = int(level_data["big_blind"])
+
+    game.small_blind = target_sb
+    game.big_blind = target_bb
+
+
 async def _enforce_sitgo_disconnect_timeout(table_id: str, user_id: str) -> None:
     key = _disconnect_task_key(table_id, user_id)
     try:
@@ -1879,6 +1905,7 @@ async def _delayed_start_hand(
 
     try:
         await _sync_cash_engine_from_db(table_id, db_table, game)
+        await _sync_sitgo_blinds_for_next_hand(table_id, db_table, game)
     except Exception:
         logger.exception("Sync DB->engine fallita prima dell'avvio mano per tavolo %s", table_id)
         await game_manager.broadcast(

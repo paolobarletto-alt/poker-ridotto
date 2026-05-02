@@ -468,7 +468,11 @@ async def _blind_level_timer(tournament_id: str, table_id: str):
 
         game = game_manager.get_table(table_id)
         if game:
-            game.min_bet = level_up_payload["big_blind"]
+            # Applica i nuovi blind subito solo se non c'è una mano in corso.
+            # Se la mano è in corso verranno sincronizzati prima della mano successiva.
+            if not game.hand_in_progress():
+                game.small_blind = level_up_payload["small_blind"]
+                game.big_blind = level_up_payload["big_blind"]
 
         await game_manager.broadcast(
             table_id,
